@@ -52,6 +52,11 @@ class FreeSwitchConfig:
     dialplan_priority: int = 1
 
 @dataclass
+class APIConfig:
+    host: str = os.getenv("API_HOST", "0.0.0.0")
+    port: int = int(os.getenv("API_PORT", 8080))
+
+@dataclass
 class SystemConfig:
     fallback_retry_count: int = 3
     system_failure_threshold: int = 5
@@ -87,6 +92,7 @@ class Config:
     tts = TTSConfig()
     redis = RedisConfig()
     freeswitch = FreeSwitchConfig()
+    api = APIConfig()
     system = SystemConfig()
     
     # 日志配置

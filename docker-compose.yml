@@ -1,30 +1,45 @@
-# docker-compose.yml
+# docker-compose.yml - FreeSWITCH AI Robot
 version: '3.8'
 
 services:
   ai-robot:
     build: .
     ports:
-      - "8080:8080"
+      - "8080:8080"  # 暴露API端口
     environment:
       - REDIS_HOST=redis
-      - ASR_WS_URL=ws://asr-service:10095
-      - LLM_API_URL=http://llm-service:8080/v1/chat/completions
-      - TTS_API_URL=http://tts-service:8000/tts
-      - FS_HOST=freeswitch
-      - FS_PASSWORD=ClueCon
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+      # 注意：ASR、LLM、TTS和FreeSWITCH服务需要单独配置或使用外部服务
+      - ASR_WS_URL=${ASR_WS_URL:-ws://localhost:10095}
+      - LLM_API_URL=${LLM_API_URL:-http://localhost:8080/v1/chat/completions}
+      - TTS_API_URL=${TTS_API_URL:-http://localhost:8000/tts}
+      - FS_HOST=${FS_HOST:-localhost}
+      - FS_PASSWORD=${FS_PASSWORD:-ClueCon}
     depends_on:
       - redis
     restart: unless-stopped
+    volumes:
+      - ./logs:/var/log/ai-robot  # 挂载日志目录
+      - ./scenarios:/app/scenarios  # 挂载场景配置
+      - ./contacts:/app/contacts    # 挂载联系人数据
+    networks:
+      - ai-robot-network
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6379:6379"  # 暴露Redis端口
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks:
+      - ai-robot-network
 
 volumes:
   redis_data:
+
+networks:
+  ai-robot-network:
+    driver: bridge

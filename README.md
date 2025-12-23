@@ -155,8 +155,44 @@ python main.py
 
 ### Docker运行
 
+1. 构建镜像：
+```bash
+docker-compose build
+```
+
+2. 启动服务：
 ```bash
 docker-compose up -d
+```
+
+3. 查看服务状态：
+```bash
+docker-compose ps
+```
+
+4. 查看日志：
+```bash
+docker-compose logs -f ai-robot
+```
+
+#### 端口说明
+
+- **API服务**: `http://localhost:8080` - REST API接口
+- **Redis**: `localhost:6379` - Redis数据库
+
+#### 环境变量配置
+
+创建 `.env` 文件配置环境变量：
+
+```bash
+cp .env.example .env
+# 编辑 .env 文件设置相应的服务地址
+```
+
+#### 停止服务
+
+```bash
+docker-compose down
 ```
 
 ### FreeSWITCH配置

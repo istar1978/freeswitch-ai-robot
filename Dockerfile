@@ -10,4 +10,7 @@ COPY . .
 # 创建日志目录
 RUN mkdir -p /var/log/ai-robot
 
+# 暴露API端口
+EXPOSE 8080
+
 CMD ["python", "main.py"]

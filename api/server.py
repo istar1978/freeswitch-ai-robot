@@ -359,8 +359,13 @@ class APIServer:
             logger.error(f"健康检查失败: {e}")
             return web.json_response({'error': str(e)}, status=500)
 
-    async def start(self, host: str = '0.0.0.0', port: int = 8080):
+    async def start(self, host: str = None, port: int = None):
         """启动服务器"""
+        if host is None:
+            host = config.api.host
+        if port is None:
+            port = config.api.port
+
         try:
             self.runner = web.AppRunner(self.app)
             await self.runner.setup()
