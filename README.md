@@ -20,6 +20,9 @@ FreeSWITCH AI Robot 是一个集成语音交互能力的AI机器人应用。它�
 - **通话保护**：防止异常中断通话，优雅处理服务故障
 - **自动重启**：服务异常退出时自动重启机制
 - **HTTP API**：提供REST API接口用于呼叫控制
+- **呼叫测试**：内置呼叫模拟测试工具，支持性能测试和录音
+- **外呼功能**：支持从CSV文件读取联系人进行外呼活动
+- **场景配置**：可配置的机器人行为，支持多场景切换
 
 ## 系统架构
 
@@ -32,6 +35,9 @@ FreeSWITCH AI Robot 是一个集成语音交互能力的AI机器人应用。它�
 - **storage/**: 数据存储（Redis客户端）
 - **utils/**: 工具类（日志、助手函数）
 - **api/**: HTTP API服务器（呼叫控制接口）
+- **tests/**: 测试工具（呼叫模拟、性能测试）
+- **outbound/**: 外呼管理（联系人管理、外呼活动）
+- **scenarios/**: 场景配置（机器人行为配置、多场景支持）
 
 ## FreeSWITCH集成
 
@@ -51,11 +57,30 @@ FreeSWITCH AI Robot 是一个集成语音交互能力的AI机器人应用。它�
 
 ### API接口
 
-提供HTTP API用于FreeSWITCH集成：
+提供HTTP API用于FreeSWITCH集成和功能扩展：
 
+#### 基础呼叫接口
 - `POST /call/start` - 开始呼叫处理
 - `GET /call/status/{session_id}` - 查询呼叫状态
 - `POST /call/end/{session_id}` - 结束呼叫
+
+#### 测试接口
+- `POST /test/simulate` - 模拟单个呼叫测试
+- `POST /test/batch` - 批量运行测试
+- `GET /test/metrics` - 获取测试指标
+
+#### 外呼接口
+- `POST /outbound/start` - 启动外呼活动
+- `POST /outbound/stop` - 停止外呼活动
+- `GET /outbound/status` - 获取外呼状态
+- `POST /outbound/add-contact` - 添加联系人
+
+#### 场景接口
+- `GET /scenarios` - 获取场景列表
+- `GET /scenarios/{scenario_id}` - 获取特定场景配置
+- `POST /scenarios/{scenario_id}/activate` - 激活场景
+
+#### 监控接口
 - `GET /health` - 健康检查
 
 ## 安装
@@ -101,6 +126,19 @@ docker-compose build
 - `FS_HOST`: FreeSWITCH主机 (默认: localhost)
 - `FS_PASSWORD`: FreeSWITCH密码 (默认: ClueCon)
 
+### 测试配置
+- `TEST_AUDIO_DIR`: 测试音频文件存储目录 (默认: ./test_audio)
+- `TEST_METRICS_FILE`: 测试指标文件路径 (默认: ./test_metrics.json)
+
+### 外呼配置
+- `OUTBOUND_CONTACT_DIR`: 联系人文件目录 (默认: ./contacts)
+- `OUTBOUND_MAX_CONCURRENT`: 最大并发外呼数 (默认: 5)
+- `OUTBOUND_RETRY_ATTEMPTS`: 外呼重试次数 (默认: 3)
+
+### 场景配置
+- `SCENARIOS_DIR`: 场景配置文件目录 (默认: ./scenarios)
+- `DEFAULT_SCENARIO`: 默认场景ID (默认: default)
+
 ## 运行
 
 ### 本地运行
@@ -133,6 +171,8 @@ fs_cli -x "reloadxml"
 
 ### API使用
 
+#### 基础呼叫控制
+
 ```bash
 # 开始呼叫
 curl -X POST http://localhost:8080/call/start \
@@ -144,6 +184,56 @@ curl http://localhost:8080/call/status/call-123
 
 # 结束呼叫
 curl -X POST http://localhost:8080/call/end/call-123
+```
+
+#### 测试功能
+
+```bash
+# 模拟单个呼叫测试
+curl -X POST http://localhost:8080/test/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"scenario_id": "default", "duration": 30, "record_audio": true}'
+
+# 批量测试
+curl -X POST http://localhost:8080/test/batch \
+  -H "Content-Type: application/json" \
+  -d '{"scenarios": ["default", "sales"], "iterations": 5, "concurrent": true}'
+
+# 获取测试指标
+curl http://localhost:8080/test/metrics
+```
+
+#### 外呼功能
+
+```bash
+# 启动外呼活动
+curl -X POST http://localhost:8080/outbound/start \
+  -H "Content-Type: application/json" \
+  -d '{"campaign_name": "sales_campaign", "contact_file": "contacts.csv", "scenario_id": "sales"}'
+
+# 停止外呼活动
+curl -X POST http://localhost:8080/outbound/stop
+
+# 获取外呼状态
+curl http://localhost:8080/outbound/status
+
+# 添加联系人
+curl -X POST http://localhost:8080/outbound/add-contact \
+  -H "Content-Type: application/json" \
+  -d '{"contact": {"name": "John Doe", "phone": "1234567890", "priority": 1}}'
+```
+
+#### 场景管理
+
+```bash
+# 获取场景列表
+curl http://localhost:8080/scenarios
+
+# 获取特定场景配置
+curl http://localhost:8080/scenarios/sales
+
+# 激活场景
+curl -X POST http://localhost:8080/scenarios/support/activate
 ```
 
 ## 部署
@@ -216,6 +306,12 @@ freeswitch-ai-robot/
 ├── storage/               # 数据存储
 ├── utils/                 # 工具类
 ├── api/                   # HTTP API服务器
+├── tests/                 # 测试工具
+│   └── call_tester.py     # 呼叫模拟测试
+├── outbound/              # 外呼管理
+│   └── outbound_manager.py # 外呼活动管理
+├── scenarios/             # 场景配置
+│   └── scenario_manager.py # 场景配置管理
 └── scripts/               # 部署脚本
 ```
 

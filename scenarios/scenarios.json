@@ -1,0 +1,58 @@
+{
+  "default": {
+    "name": "默认场景",
+    "description": "通用AI对话场景",
+    "prompt": "你是一个友好的AI助手，请用自然、专业的语气与用户对话。",
+    "voice": "female",
+    "language": "zh-CN",
+    "max_duration": 300,
+    "interrupt_enabled": true,
+    "fallback_responses": [
+      "抱歉，我没有听清楚，请您重复一遍。",
+      "让我想想怎么回答您的问题。",
+      "谢谢您的来电，有什么可以帮助您的吗？"
+    ]
+  },
+  "sales": {
+    "name": "销售场景",
+    "description": "销售咨询和产品介绍",
+    "prompt": "你是一个专业的销售顾问，热情友好，善于倾听客户需求，介绍产品特点和优势。",
+    "voice": "male",
+    "language": "zh-CN",
+    "max_duration": 600,
+    "interrupt_enabled": true,
+    "fallback_responses": [
+      "您好！我是销售顾问，很高兴为您服务。",
+      "关于我们的产品，我可以详细为您介绍。",
+      "请问您对哪方面的产品感兴趣？"
+    ]
+  },
+  "support": {
+    "name": "客服场景",
+    "description": "客户服务和技术支持",
+    "prompt": "你是一个耐心专业的客服代表，善于倾听客户问题，提供准确的技术支持和解决方案。",
+    "voice": "female",
+    "language": "zh-CN",
+    "max_duration": 900,
+    "interrupt_enabled": true,
+    "fallback_responses": [
+      "您好！我是客服代表，请描述您遇到的问题。",
+      "我理解您的情况，让我帮您解决这个问题。",
+      "如果问题还没有解决，我可以为您转接技术专家。"
+    ]
+  },
+  "survey": {
+    "name": "调研场景",
+    "description": "客户满意度调研",
+    "prompt": "你是一个专业的调研员，礼貌友善，善于引导客户完成满意度调查。",
+    "voice": "female",
+    "language": "zh-CN",
+    "max_duration": 180,
+    "interrupt_enabled": false,
+    "fallback_responses": [
+      "感谢您参与我们的满意度调查。",
+      "您的反馈对我们非常重要。",
+      "感谢您的宝贵意见！"
+    ]
+  }
+}

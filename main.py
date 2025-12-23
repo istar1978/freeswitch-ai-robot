@@ -11,6 +11,9 @@ from freeswitch.esl_handler import FreeSwitchHandler
 from freeswitch.dialplan_generator import DialplanGenerator
 from core.health_checker import HealthChecker
 from api.server import APIServer
+from tests.call_tester import CallTester
+from outbound.outbound_manager import OutboundManager
+from scenarios.scenario_manager import ScenarioManager
 
 logger = setup_logger(__name__)
 
@@ -19,7 +22,10 @@ class AIRobotApplication:
         self.fs_handler = FreeSwitchHandler()
         self.health_checker = HealthChecker()
         self.dialplan_generator = DialplanGenerator()
-        self.api_server = APIServer(self.fs_handler)
+        self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
+        self.call_tester = CallTester()
+        self.outbound_manager = OutboundManager(self.fs_handler)
+        self.scenario_manager = ScenarioManager()
         self.running = False
         self.restart_count = 0
         self.max_restarts = 5
@@ -49,6 +55,12 @@ class AIRobotApplication:
             # 启动API服务器
             await self.api_server.start()
 
+            # 启动外呼管理器
+            await self.outbound_manager.start()
+
+            # 加载场景配置
+            await self.scenario_manager.load_scenarios()
+
             self.running = True
             logger.info("AI机器人应用启动完成")
 
@@ -64,6 +76,7 @@ class AIRobotApplication:
         try:
             await self.api_server.stop()
             await self.fs_handler.stop()
+            await self.outbound_manager.stop()
             logger.info("AI机器人应用已关闭")
         except Exception as e:
             logger.error(f"应用关闭异常: {e}")
@@ -137,7 +150,9 @@ class AIRobotApplication:
             # 重新初始化
             self.fs_handler = FreeSwitchHandler()
             self.health_checker = HealthChecker()
-            self.api_server = APIServer(self.fs_handler)
+            self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
+            self.outbound_manager = OutboundManager(self.fs_handler)
+            self.scenario_manager = ScenarioManager()
 
             # 重新启动
             await self.startup()
