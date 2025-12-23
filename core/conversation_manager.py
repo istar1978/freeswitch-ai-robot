@@ -48,21 +48,27 @@ class ConversationManager:
         
     async def start(self):
         """开始对话"""
-        logger.info(f"会话 {self.session_id} 开始")
-        await self._change_state(ConversationState.ASR_LISTENING)
-        
-        # 启动ASR监听
-        success = await self.asr_client.start_listening(
-            self._send_audio_to_asr,
-            self._on_asr_result
-        )
-        
-        if not success:
-            await self._handle_service_failure("asr")
-            return
-            
-        # 初始问候
-        await self._play_greeting()
+        try:
+            logger.info(f"会话 {self.session_id} 开始")
+            await self._change_state(ConversationState.ASR_LISTENING)
+
+            # 启动ASR监听
+            success = await self.asr_client.start_listening(
+                self._send_audio_to_asr,
+                self._on_asr_result
+            )
+
+            if not success:
+                await self._handle_service_failure("asr")
+                return
+
+            # 初始问候
+            await self._play_greeting()
+
+        except Exception as e:
+            logger.error(f"启动对话失败 {self.session_id}: {e}")
+            await self._handle_service_failure("system")
+            await self._change_state(ConversationState.ERROR)
         
     async def _play_greeting(self):
         """播放问候语"""
@@ -186,21 +192,34 @@ class ConversationManager:
         """合成并播放语音"""
         if not text.strip():
             return
-            
+
+        previous_state = self.state
         await self._change_state(ConversationState.TTS_PLAYING)
         self.tts_playback_position = len(text)
-        
+
         try:
             async for audio_data in self.tts_client.streaming_synthesize(text):
                 if self._stop_event.is_set():
+                    logger.info("TTS播放被中断")
                     break
-                    
+
                 if self.on_audio_output:
                     await self.on_audio_output(audio_data)
-                    
+
+            # 恢复到之前的状态或ASR监听状态
+            if not self._stop_event.is_set():
+                await self._change_state(ConversationState.ASR_LISTENING)
+
         except Exception as e:
             logger.error(f"TTS合成失败: {e}")
-            await self._play_fallback()
+            await self._handle_service_failure("tts")
+            # 尝试播放降级回复
+            try:
+                await self._play_fallback()
+            except Exception as fallback_error:
+                logger.error(f"降级回复也失败: {fallback_error}")
+                # 确保状态正确
+                await self._change_state(ConversationState.ERROR)
             
     async def _play_fallback(self):
         """播放降级回复"""

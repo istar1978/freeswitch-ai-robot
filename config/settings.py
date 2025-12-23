@@ -44,6 +44,12 @@ class FreeSwitchConfig:
     password: str = os.getenv("FS_PASSWORD", "ClueCon")
     audio_sample_rate: int = 8000
     audio_channels: int = 1
+    reconnect_attempts: int = 3
+    reconnect_interval: int = 5
+    heartbeat_interval: int = 30
+    dialplan_context: str = os.getenv("FS_DIALPLAN_CONTEXT", "ai-robot")
+    dialplan_extension: str = os.getenv("FS_DIALPLAN_EXTENSION", "ai-robot")
+    dialplan_priority: int = 1
 
 @dataclass
 class SystemConfig:

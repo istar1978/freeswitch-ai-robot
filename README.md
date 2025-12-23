@@ -15,6 +15,11 @@ FreeSWITCH AI Robot 是一个集成语音交互能力的AI机器人应用。它�
 - **健康监控**：内置健康检查和监控功能
 - **Redis存储**：使用Redis进行会话数据存储
 - **Docker部署**：支持容器化部署和编排
+- **FreeSWITCH集成**：完整的ESL连接管理和拨号计划支持
+- **连接监控**：自动检测和恢复FreeSWITCH连接
+- **通话保护**：防止异常中断通话，优雅处理服务故障
+- **自动重启**：服务异常退出时自动重启机制
+- **HTTP API**：提供REST API接口用于呼叫控制
 
 ## 系统架构
 
@@ -23,9 +28,35 @@ FreeSWITCH AI Robot 是一个集成语音交互能力的AI机器人应用。它�
 - **clients/**: 外部服务客户端（ASR、LLM、TTS）
 - **config/**: 配置管理
 - **core/**: 核心业务逻辑（对话管理、状态机、健康检查）
-- **freeswitch/**: FreeSWITCH集成（ESL处理、音频流）
+- **freeswitch/**: FreeSWITCH集成（ESL处理、音频流、拨号计划）
 - **storage/**: 数据存储（Redis客户端）
 - **utils/**: 工具类（日志、助手函数）
+- **api/**: HTTP API服务器（呼叫控制接口）
+
+## FreeSWITCH集成
+
+### 拨号计划配置
+
+项目自动生成FreeSWITCH拨号计划文件：
+
+1. **XML拨号计划**：`freeswitch/dialplan_generator.py` 生成XML格式的拨号计划
+2. **Lua脚本**：生成处理AI机器人呼叫的Lua脚本
+3. **自动部署**：启动时自动保存到FreeSWITCH配置目录
+
+### 连接管理
+
+- **自动重连**：检测连接断开时自动重连FreeSWITCH
+- **心跳监控**：定期检查ESL连接状态
+- **连接保护**：确保通话过程中连接稳定
+
+### API接口
+
+提供HTTP API用于FreeSWITCH集成：
+
+- `POST /call/start` - 开始呼叫处理
+- `GET /call/status/{session_id}` - 查询呼叫状态
+- `POST /call/end/{session_id}` - 结束呼叫
+- `GET /health` - 健康检查
 
 ## 安装
 
@@ -82,10 +113,37 @@ docker-compose build
 python main.py
 ```
 
+应用将在8080端口启动HTTP API服务器。
+
 ### Docker运行
 
 ```bash
 docker-compose up -d
+```
+
+### FreeSWITCH配置
+
+1. 确保FreeSWITCH安装并运行
+2. 运行应用时会自动生成拨号计划文件
+3. 重载FreeSWITCH拨号计划：
+
+```bash
+fs_cli -x "reloadxml"
+```
+
+### API使用
+
+```bash
+# 开始呼叫
+curl -X POST http://localhost:8080/call/start \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "call-123", "caller_id": "1001"}'
+
+# 查询状态
+curl http://localhost:8080/call/status/call-123
+
+# 结束呼叫
+curl -X POST http://localhost:8080/call/end/call-123
 ```
 
 ## 部署
@@ -112,6 +170,32 @@ docker-compose logs -f ai-robot
 - `scripts/deploy.sh`: 部署脚本
 - `scripts/health_check.py`: 健康检查脚本
 
+## 故障恢复和监控
+
+### 自动重启机制
+
+- **异常检测**：监控应用运行状态，检测严重错误
+- **自动重启**：异常退出时自动重启，最多重试5次
+- **延迟重启**：重启间隔递增，避免频繁重启
+
+### 通话保护
+
+- **状态保持**：通话过程中保持连接状态
+- **优雅降级**：服务故障时播放预设回复
+- **中断处理**：正确处理用户打断和系统中断
+
+### 健康监控
+
+- **服务检查**：定期检查ASR、LLM、TTS、Redis服务状态
+- **连接监控**：监控FreeSWITCH连接状态
+- **告警通知**：检测到服务不健康时记录警告
+
+### 日志和调试
+
+- **结构化日志**：使用JSON格式日志，便于分析
+- **轮转日志**：自动轮转日志文件，避免磁盘空间不足
+- **多级别日志**：支持DEBUG、INFO、WARNING、ERROR级别
+
 ## 开发
 
 ### 项目结构
@@ -126,8 +210,12 @@ freeswitch-ai-robot/
 ├── config/                # 配置管理
 ├── core/                  # 核心业务逻辑
 ├── freeswitch/            # FreeSWITCH集成
+│   ├── esl_handler.py     # ESL连接管理
+│   ├── audio_stream.py    # 音频流处理
+│   └── dialplan_generator.py # 拨号计划生成
 ├── storage/               # 数据存储
 ├── utils/                 # 工具类
+├── api/                   # HTTP API服务器
 └── scripts/               # 部署脚本
 ```
 
