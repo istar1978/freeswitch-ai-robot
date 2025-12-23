@@ -6,6 +6,7 @@ services:
     build: .
     ports:
       - "8080:8080"  # 暴露API端口
+      - "8081:8081"  # 暴露WebUI端口
     environment:
       - REDIS_HOST=redis
       - API_HOST=0.0.0.0

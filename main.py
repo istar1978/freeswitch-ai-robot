@@ -13,7 +13,7 @@ from core.health_checker import HealthChecker
 from api.server import APIServer
 from tests.call_tester import CallTester
 from outbound.outbound_manager import OutboundManager
-from scenarios.scenario_manager import ScenarioManager
+from webui.app import WebUIApp
 
 logger = setup_logger(__name__)
 
@@ -26,6 +26,7 @@ class AIRobotApplication:
         self.call_tester = CallTester()
         self.outbound_manager = OutboundManager(self.fs_handler)
         self.scenario_manager = ScenarioManager()
+        self.webui_app = WebUIApp(self.fs_handler, self.scenario_manager, self.outbound_manager)
         self.running = False
         self.restart_count = 0
         self.max_restarts = 5
@@ -61,6 +62,9 @@ class AIRobotApplication:
             # 加载场景配置
             await self.scenario_manager.load_scenarios()
 
+            # 启动WebUI服务器
+            await self.webui_app.start()
+
             self.running = True
             logger.info("AI机器人应用启动完成")
 
@@ -77,6 +81,7 @@ class AIRobotApplication:
             await self.api_server.stop()
             await self.fs_handler.stop()
             await self.outbound_manager.stop()
+            await self.webui_app.stop()
             logger.info("AI机器人应用已关闭")
         except Exception as e:
             logger.error(f"应用关闭异常: {e}")
@@ -153,6 +158,7 @@ class AIRobotApplication:
             self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
             self.outbound_manager = OutboundManager(self.fs_handler)
             self.scenario_manager = ScenarioManager()
+            self.webui_app = WebUIApp(self.fs_handler, self.scenario_manager, self.outbound_manager)
 
             # 重新启动
             await self.startup()

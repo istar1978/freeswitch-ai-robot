@@ -52,9 +52,36 @@ class FreeSwitchConfig:
     dialplan_priority: int = 1
 
 @dataclass
-class APIConfig:
-    host: str = os.getenv("API_HOST", "0.0.0.0")
-    port: int = int(os.getenv("API_PORT", 8080))
+class MultiFSConfig:
+    instances: Dict[str, Dict] = None  # 多FreeSWITCH实例配置
+
+    def __post_init__(self):
+        if self.instances is None:
+            self.instances = {
+                "default": {
+                    "host": os.getenv("FS_HOST", "localhost"),
+                    "port": int(os.getenv("FS_PORT", 8021)),
+                    "password": os.getenv("FS_PASSWORD", "ClueCon"),
+                    "enabled_scenarios": ["default", "sales", "support"],
+                    "description": "默认FreeSWITCH实例"
+                }
+            }
+
+@dataclass
+class WebUIConfig:
+    enabled: bool = os.getenv("WEBUI_ENABLED", "true").lower() == "true"
+    host: str = os.getenv("WEBUI_HOST", "0.0.0.0")
+    port: int = int(os.getenv("WEBUI_PORT", 8081))
+    secret_key: str = os.getenv("WEBUI_SECRET_KEY", "change-this-secret-key")
+    session_timeout: int = int(os.getenv("WEBUI_SESSION_TIMEOUT", 3600))
+
+@dataclass
+class AuthConfig:
+    enabled: bool = os.getenv("AUTH_ENABLED", "true").lower() == "true"
+    admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password_hash: str = os.getenv("ADMIN_PASSWORD_HASH", "")  # 存储哈希后的密码
+    jwt_secret: str = os.getenv("JWT_SECRET", "jwt-secret-key")
+    jwt_expiration: int = int(os.getenv("JWT_EXPIRATION", 86400))  # 24小时
 
 @dataclass
 class SystemConfig:
@@ -93,6 +120,9 @@ class Config:
     redis = RedisConfig()
     freeswitch = FreeSwitchConfig()
     api = APIConfig()
+    multi_fs = MultiFSConfig()
+    webui = WebUIConfig()
+    auth = AuthConfig()
     system = SystemConfig()
     
     # 日志配置
