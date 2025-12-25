@@ -2,14 +2,18 @@
 import asyncio
 import time
 import random
+import json
 from typing import Optional, Callable
 from enum import Enum
+from datetime import datetime
 from config.settings import config
 from utils.logger import setup_logger
 from storage.redis_client import redis_client
+from storage.mysql_client import mysql_client, CallRecord
 from clients.asr_client import FunASRClient
 from clients.llm_client import LLMClient
 from clients.tts_client import TTSClient
+from sqlalchemy import select
 
 logger = setup_logger(__name__)
 
@@ -22,8 +26,10 @@ class ConversationState(Enum):
     ERROR = "error"
 
 class ConversationManager:
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, caller_number: str = None, scenario_id: str = "default"):
         self.session_id = session_id
+        self.caller_number = caller_number
+        self.scenario_id = scenario_id
         self.state = ConversationState.IDLE
         self.current_text = ""
         self.last_voice_time = 0
@@ -31,12 +37,17 @@ class ConversationManager:
         self.interrupt_count = 0
         self.conversation_history = []
         self.tts_playback_position = 0
-        
+        self.call_start_time = datetime.utcnow()
+        self.call_record_id = None
+
+        # 场景配置
+        self.scenario_config = None
+
         # 客户端
         self.asr_client = FunASRClient()
         self.llm_client = LLMClient()
         self.tts_client = TTSClient()
-        
+
         # 回调函数
         self.on_audio_output: Optional[Callable] = None
         self.on_state_change: Optional[Callable] = None
@@ -49,7 +60,13 @@ class ConversationManager:
     async def start(self):
         """开始对话"""
         try:
-            logger.info(f"会话 {self.session_id} 开始")
+            # 加载场景配置
+            await self._load_scenario_config()
+
+            # 创建通话记录
+            await self._create_call_record()
+
+            logger.info(f"会话 {self.session_id} 开始 (场景: {self.scenario_id})")
             await self._change_state(ConversationState.ASR_LISTENING)
 
             # 启动ASR监听
@@ -69,11 +86,51 @@ class ConversationManager:
             logger.error(f"启动对话失败 {self.session_id}: {e}")
             await self._handle_service_failure("system")
             await self._change_state(ConversationState.ERROR)
-        
+
     async def _play_greeting(self):
         """播放问候语"""
-        greeting = "您好，我是AI助手，请问有什么可以帮您？"
+        greeting = self.scenario_config.get('welcome_message', '您好，我是AI助手，请问有什么可以帮您？')
         await self._synthesize_and_play(greeting)
+
+    async def _load_scenario_config(self):
+        """加载场景配置"""
+        try:
+            scenario = await mysql_client.get_scenario(self.scenario_id)
+            if scenario:
+                self.scenario_config = {
+                    'scenario_id': scenario.scenario_id,
+                    'name': scenario.name,
+                    'description': scenario.description,
+                    'entry_points': scenario.entry_points,
+                    'system_prompt': scenario.system_prompt,
+                    'welcome_message': scenario.welcome_message,
+                    'fallback_responses': scenario.fallback_responses,
+                    'max_turns': scenario.max_turns,
+                    'timeout_seconds': scenario.timeout_seconds,
+                    'custom_settings': scenario.custom_settings
+                }
+                logger.info(f"已加载场景配置: {scenario.name}")
+            else:
+                logger.warning(f"场景不存在: {self.scenario_id}，使用默认配置")
+                self.scenario_config = self._get_default_scenario_config()
+        except Exception as e:
+            logger.error(f"加载场景配置失败: {e}，使用默认配置")
+            self.scenario_config = self._get_default_scenario_config()
+
+    def _get_default_scenario_config(self):
+        """获取默认场景配置"""
+        return {
+            'scenario_id': 'default',
+            'name': '默认场景',
+            'description': '默认AI助手场景',
+            'entry_points': ['default'],
+            'system_prompt': '你是专业的AI助手，请友好地回答用户的问题。',
+            'welcome_message': '您好，我是AI助手，请问有什么可以帮您？',
+            'fallback_responses': ['抱歉，我暂时无法处理这个问题，请稍后再试。'],
+            'max_turns': 10,
+            'timeout_seconds': 300,
+            'custom_settings': {}
+        }
         
     async def _on_asr_result(self, text: str, is_final: bool, timestamp: int):
         """处理ASR识别结果"""
@@ -163,6 +220,11 @@ class ConversationManager:
             # 添加助手回复到历史
             if full_response:
                 self.conversation_history.append({"role": "assistant", "content": full_response})
+            elif full_response == "":
+                # 如果没有累积响应，可能是实时播放了，使用最后累积的内容
+                if self.conversation_history and self.conversation_history[-1]["role"] == "user":
+                    # 找到最后的用户消息后添加空的助手回复（实际回复已通过实时TTS播放）
+                    pass  # 已经在上面处理了
                 
             await self._change_state(ConversationState.ASR_LISTENING)
             
@@ -249,13 +311,56 @@ class ConversationManager:
         else:
             await self._play_fallback()
             
-    async def _play_system_unavailable(self):
-        """播放系统不可用提示"""
-        message = "系统暂时不可用，请稍后再试。"
-        await self._synthesize_and_play(message)
+    async def _create_call_record(self):
+        """创建通话记录"""
+        try:
+            session = await mysql_client.get_session()
+            async with session:
+                call_record = CallRecord(
+                    session_id=self.session_id,
+                    caller_number=self.caller_number,
+                    start_time=self.call_start_time,
+                    conversation_log=json.dumps(self.conversation_history, ensure_ascii=False)
+                )
+                session.add(call_record)
+                await session.commit()
+                self.call_record_id = call_record.id
+                logger.info(f"创建通话记录: {self.call_record_id}")
+        except Exception as e:
+            logger.error(f"创建通话记录失败: {e}")
+
+    async def _update_call_record(self, status: str):
+        """更新通话记录"""
+        try:
+            if not self.call_record_id:
+                return
+                
+            end_time = datetime.utcnow()
+            duration = int((end_time - self.call_start_time).total_seconds())
+            
+            session = await mysql_client.get_session()
+            async with session:
+                result = await session.execute(
+                    select(CallRecord).where(CallRecord.id == self.call_record_id)
+                )
+                call_record = result.scalar_one_or_none()
+                
+                if call_record:
+                    call_record.end_time = end_time
+                    call_record.duration = duration
+                    call_record.conversation_log = json.dumps(self.conversation_history, ensure_ascii=False)
+                    call_record.status = status
+                    await session.commit()
+                    logger.info(f"更新通话记录: {self.call_record_id}, 状态: {status}")
+        except Exception as e:
+            logger.error(f"更新通话记录失败: {e}")
         
     async def stop(self):
         """停止对话"""
         self._stop_event.set()
         await self.asr_client.stop_listening()
+        
+        # 更新通话记录
+        await self._update_call_record("completed")
+        
         logger.info(f"会话 {self.session_id} 结束")

@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeSWITCH AI Robot - 场景管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .sidebar { min-height: 100vh; background-color: #343a40; }
+        .sidebar .nav-link { color: rgba(255,255,255,.75); padding: 0.75rem 1rem; }
+        .sidebar .nav-link:hover { color: #fff; background-color: rgba(255,255,255,.1); }
+        .sidebar .nav-link.active { color: #fff; background-color: #0d6efd; }
+        .scenario-card { transition: transform 0.2s; }
+        .scenario-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <nav class="col-md-2 sidebar p-0">
+                <div class="p-3">
+                    <h5 class="text-white mb-4">AI Robot管理系统</h5>
+                    <ul class="nav flex-column">
+                        <li class="nav-item"><a class="nav-link" href="/dashboard"><i class="bi bi-house-door"></i> 仪表板</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/freeswitch"><i class="bi bi-server"></i> FreeSWITCH管理</a></li>
+                        <li class="nav-item"><a class="nav-link active" href="/scenarios"><i class="bi bi-robot"></i> 场景管理</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/outbound"><i class="bi bi-telephone-outbound"></i> 外呼管理</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/monitoring"><i class="bi bi-graph-up"></i> 实时监控</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/settings"><i class="bi bi-gear"></i> 系统设置</a></li>
+                        <li class="nav-item mt-3"><a class="nav-link" href="#" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- 主内容区 -->
+            <main class="col-md-10 ms-sm-auto px-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">场景管理</h1>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addScenarioModal">
+                        <i class="bi bi-plus-circle"></i> 创建场景
+                    </button>
+                </div>
+
+                <!-- 场景列表 -->
+                <div class="row" id="scenarios-container">
+                    <!-- 动态生成场景卡片 -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 创建场景模态框 -->
+    <div class="modal fade" id="addScenarioModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建场景</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-scenario-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">场景ID</label>
+                                    <input type="text" class="form-control" name="scenario_id" required>
+                                    <div class="form-text">唯一标识符，用于系统内部识别</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">场景名称</label>
+                                    <input type="text" class="form-control" name="name" required>
+                                    <div class="form-text">显示名称，便于用户识别</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">描述</label>
+                            <textarea class="form-control" name="description" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">入口点</label>
+                            <input type="text" class="form-control" name="entry_points" placeholder="用逗号分隔多个入口点" required>
+                            <div class="form-text">呼叫进入时使用的标识符，如：customer,sales,support</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">系统提示词</label>
+                            <textarea class="form-control" name="system_prompt" rows="4" required></textarea>
+                            <div class="form-text">AI助手的系统级指令，定义机器人行为</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">欢迎消息</label>
+                            <textarea class="form-control" name="welcome_message" rows="2" required></textarea>
+                            <div class="form-text">用户接入时的欢迎语</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">最大轮次</label>
+                                    <input type="number" class="form-control" name="max_turns" value="10" min="1" max="50">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">超时时间(秒)</label>
+                                    <input type="number" class="form-control" name="timeout_seconds" value="300" min="30" max="3600">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">备用回复</label>
+                            <textarea class="form-control" name="fallback_responses" rows="3" placeholder="每行一个备用回复"></textarea>
+                            <div class="form-text">当AI无法正常回复时使用的备用语句</div>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" name="is_active" checked>
+                            <label class="form-check-label">启用场景</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="createScenario()">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑场景模态框 -->
+    <div class="modal fade" id="editScenarioModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑场景</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-scenario-form">
+                        <input type="hidden" name="scenario_id">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">场景ID</label>
+                                    <input type="text" class="form-control" name="scenario_id_display" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">场景名称</label>
+                                    <input type="text" class="form-control" name="name" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">描述</label>
+                            <textarea class="form-control" name="description" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">入口点</label>
+                            <input type="text" class="form-control" name="entry_points" placeholder="用逗号分隔多个入口点" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">系统提示词</label>
+                            <textarea class="form-control" name="system_prompt" rows="4" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">欢迎消息</label>
+                            <textarea class="form-control" name="welcome_message" rows="2" required></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">最大轮次</label>
+                                    <input type="number" class="form-control" name="max_turns" min="1" max="50">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">超时时间(秒)</label>
+                                    <input type="number" class="form-control" name="timeout_seconds" min="30" max="3600">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">备用回复</label>
+                            <textarea class="form-control" name="fallback_responses" rows="3" placeholder="每行一个备用回复"></textarea>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" name="is_active">
+                            <label class="form-check-label">启用场景</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="updateScenario()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 页面加载时获取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadScenarios();
+        });
+
+        async function loadScenarios() {
+            try {
+                const response = await fetch('/api/scenarios');
+                const data = await response.json();
+
+                if (data.success) {
+                    const container = document.getElementById('scenarios-container');
+                    container.innerHTML = '';
+
+                    if (data.scenarios.length === 0) {
+                        container.innerHTML = `
+                            <div class="col-12">
+                                <div class="alert alert-info text-center">
+                                    <i class="bi bi-info-circle fs-1"></i>
+                                    <h4 class="mt-3">暂无场景</h4>
+                                    <p>点击"创建场景"按钮开始配置您的第一个AI对话场景</p>
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    data.scenarios.forEach(scenario => {
+                        const card = document.createElement('div');
+                        card.className = 'col-md-6 col-lg-4 mb-4';
+                        card.innerHTML = `
+                            <div class="card scenario-card h-100">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">${scenario.name}</h6>
+                                    <span class="badge ${scenario.is_active ? 'bg-success' : 'bg-secondary'}">
+                                        ${scenario.is_active ? '启用' : '禁用'}
+                                    </span>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted small">${scenario.description || '暂无描述'}</p>
+                                    <div class="mb-2">
+                                        <strong>入口点:</strong> ${scenario.entry_points.join(', ')}
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>最大轮次:</strong> ${scenario.max_turns}
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>超时时间:</strong> ${scenario.timeout_seconds}秒
+                                    </div>
+                                </div>
+                                <div class="card-footer">
+                                    <div class="btn-group w-100">
+                                        <button class="btn btn-outline-primary btn-sm" onclick="editScenario('${scenario.scenario_id}')">
+                                            <i class="bi bi-pencil"></i> 编辑
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="deleteScenario('${scenario.scenario_id}')">
+                                            <i class="bi bi-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                }
+            } catch (error) {
+                console.error('加载场景列表失败:', error);
+                document.getElementById('scenarios-container').innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            加载场景列表失败，请刷新页面重试
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        async function createScenario() {
+            const form = document.getElementById('add-scenario-form');
+            const formData = new FormData(form);
+
+            const data = {
+                scenario_id: formData.get('scenario_id'),
+                name: formData.get('name'),
+                description: formData.get('description'),
+                entry_points: formData.get('entry_points').split(',').map(s => s.trim()).filter(s => s),
+                system_prompt: formData.get('system_prompt'),
+                welcome_message: formData.get('welcome_message'),
+                max_turns: parseInt(formData.get('max_turns')) || 10,
+                timeout_seconds: parseInt(formData.get('timeout_seconds')) || 300,
+                fallback_responses: formData.get('fallback_responses').split('\n').map(s => s.trim()).filter(s => s),
+                is_active: form.querySelector('[name="is_active"]').checked
+            };
+
+            try {
+                const response = await fetch('/api/scenarios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('addScenarioModal')).hide();
+                    form.reset();
+                    loadScenarios();
+                } else {
+                    alert('创建失败: ' + (result.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('创建场景失败:', error);
+                alert('创建失败，请重试');
+            }
+        }
+
+        async function editScenario(scenarioId) {
+            try {
+                const response = await fetch('/api/scenarios');
+                const data = await response.json();
+
+                if (data.success) {
+                    const scenario = data.scenarios.find(s => s.scenario_id === scenarioId);
+                    if (scenario) {
+                        const form = document.getElementById('edit-scenario-form');
+                        form.scenario_id.value = scenario.scenario_id;
+                        form.scenario_id_display.value = scenario.scenario_id;
+                        form.name.value = scenario.name;
+                        form.description.value = scenario.description || '';
+                        form.entry_points.value = scenario.entry_points.join(', ');
+                        form.system_prompt.value = scenario.system_prompt;
+                        form.welcome_message.value = scenario.welcome_message;
+                        form.max_turns.value = scenario.max_turns;
+                        form.timeout_seconds.value = scenario.timeout_seconds;
+                        form.fallback_responses.value = scenario.fallback_responses.join('\n');
+                        form.is_active.checked = scenario.is_active;
+
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('editScenarioModal')).show();
+                    }
+                }
+            } catch (error) {
+                console.error('加载场景详情失败:', error);
+                alert('加载场景详情失败，请重试');
+            }
+        }
+
+        async function updateScenario() {
+            const form = document.getElementById('edit-scenario-form');
+            const formData = new FormData(form);
+            const scenarioId = formData.get('scenario_id');
+
+            const data = {
+                name: formData.get('name'),
+                description: formData.get('description'),
+                entry_points: formData.get('entry_points').split(',').map(s => s.trim()).filter(s => s),
+                system_prompt: formData.get('system_prompt'),
+                welcome_message: formData.get('welcome_message'),
+                max_turns: parseInt(formData.get('max_turns')) || 10,
+                timeout_seconds: parseInt(formData.get('timeout_seconds')) || 300,
+                fallback_responses: formData.get('fallback_responses').split('\n').map(s => s.trim()).filter(s => s),
+                is_active: form.querySelector('[name="is_active"]').checked
+            };
+
+            try {
+                const response = await fetch(`/api/scenarios/${scenarioId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('editScenarioModal')).hide();
+                    loadScenarios();
+                } else {
+                    alert('更新失败: ' + (result.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('更新场景失败:', error);
+                alert('更新失败，请重试');
+            }
+        }
+
+        async function deleteScenario(scenarioId) {
+            if (!confirm('确定要删除这个场景吗？此操作不可恢复。')) return;
+
+            try {
+                const response = await fetch(`/api/scenarios/${scenarioId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    loadScenarios();
+                } else {
+                    alert('删除失败: ' + (result.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('删除场景失败:', error);
+                alert('删除失败，请重试');
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+    </script>
+</body>
+</html>

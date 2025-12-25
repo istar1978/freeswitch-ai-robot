@@ -2,7 +2,8 @@
 import websockets
 import json
 import asyncio
-import audioop
+import numpy as np
+from scipy.signal import resample_poly
 from typing import Callable, Optional
 from config.settings import config
 from utils.logger import setup_logger
@@ -68,11 +69,17 @@ class FunASRClient:
         # 8kHz -> 16kHz 重采样
         try:
             if config.freeswitch.audio_sample_rate != config.asr.sample_rate:
-                audio_data = audioop.ratecv(
-                    audio_data, 2, 1, 
-                    config.freeswitch.audio_sample_rate, 
-                    config.asr.sample_rate, None
-                )[0]
+                # 将bytes转换为numpy数组
+                audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                
+                # 计算重采样因子
+                ratio = config.asr.sample_rate / config.freeswitch.audio_sample_rate
+                
+                # 使用scipy进行重采样
+                resampled = resample_poly(audio_array.astype(float), ratio, 1)
+                
+                # 转换回bytes
+                audio_data = resampled.astype(np.int16).tobytes()
             return audio_data
         except Exception as e:
             logger.error(f"音频处理失败: {e}")

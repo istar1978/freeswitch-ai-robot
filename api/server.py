@@ -58,12 +58,14 @@ class APIServer:
             data = await request.json()
             session_id = data.get('session_id')
             caller_id = data.get('caller_id', 'unknown')
+            instance_id = data.get('instance_id', 'default')
+            scenario_id = data.get('scenario_id', 'default')
 
             if not session_id:
                 return web.json_response({'error': 'Missing session_id'}, status=400)
 
             # 处理来电
-            success = await self.fs_handler.handle_incoming_call(session_id, caller_id)
+            success = await self.fs_handler.handle_incoming_call(session_id, instance_id, scenario_id, caller_id)
 
             if success:
                 return web.json_response({
@@ -87,20 +89,23 @@ class APIServer:
         session_id = request.match_info['session_id']
 
         try:
-            # 检查会话是否存在
-            if session_id in self.fs_handler.sessions:
-                manager = self.fs_handler.sessions[session_id]
-                return web.json_response({
-                    'session_id': session_id,
-                    'status': manager.state.value,
-                    'active': True
-                })
-            else:
-                return web.json_response({
-                    'session_id': session_id,
-                    'status': 'not_found',
-                    'active': False
-                }, status=404)
+            # 在所有实例中查找会话
+            for instance_id, instance in self.fs_handler.instances.items():
+                if session_id in instance.sessions:
+                    manager = instance.sessions[session_id]
+                    return web.json_response({
+                        'session_id': session_id,
+                        'instance_id': instance_id,
+                        'status': manager.state.value,
+                        'active': True
+                    })
+            
+            # 会话不存在
+            return web.json_response({
+                'session_id': session_id,
+                'status': 'not_found',
+                'active': False
+            }, status=404)
 
         except Exception as e:
             logger.error(f"查询呼叫状态失败: {e}")
@@ -111,10 +116,13 @@ class APIServer:
         session_id = request.match_info['session_id']
 
         try:
-            if session_id in self.fs_handler.sessions:
-                await self.fs_handler.sessions[session_id].stop()
-                del self.fs_handler.sessions[session_id]
-                logger.info(f"呼叫结束: {session_id}")
+            # 在所有实例中查找并结束会话
+            for instance_id, instance in self.fs_handler.instances.items():
+                if session_id in instance.sessions:
+                    await instance.sessions[session_id].stop()
+                    del instance.sessions[session_id]
+                    logger.info(f"呼叫结束: {session_id} (实例: {instance_id})")
+                    break
 
             return web.json_response({
                 'status': 'success',
@@ -287,10 +295,11 @@ class APIServer:
             return web.json_response({'error': 'Scenario manager not available'}, status=503)
 
         try:
-            scenarios = self.scenario_manager.list_scenarios()
+            scenarios = self.scenario_manager.get_all_scenarios()
+            scenario_dicts = [s.to_dict() for s in scenarios]
             return web.json_response({
                 'status': 'success',
-                'scenarios': scenarios
+                'scenarios': scenario_dicts
             })
 
         except Exception as e:
@@ -350,10 +359,15 @@ class APIServer:
     async def handle_health_check(self, request):
         """健康检查"""
         try:
+            # 检查是否有任何FreeSWITCH实例连接
+            any_connected = any(instance.connected for instance in self.fs_handler.instances.values())
+            total_sessions = sum(len(instance.sessions) for instance in self.fs_handler.instances.values())
+            
             return web.json_response({
                 'status': 'healthy',
-                'freeswitch_connected': self.fs_handler.connected,
-                'active_sessions': len(self.fs_handler.sessions)
+                'freeswitch_connected': any_connected,
+                'active_sessions': total_sessions,
+                'instances': len(self.fs_handler.instances)
             })
         except Exception as e:
             logger.error(f"健康检查失败: {e}")

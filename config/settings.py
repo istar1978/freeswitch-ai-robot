@@ -52,6 +52,11 @@ class FreeSwitchConfig:
     dialplan_priority: int = 1
 
 @dataclass
+class APIConfig:
+    host: str = os.getenv("API_HOST", "0.0.0.0")
+    port: int = int(os.getenv("API_PORT", 8080))
+
+@dataclass
 class MultiFSConfig:
     instances: Dict[str, Dict] = None  # 多FreeSWITCH实例配置
 
@@ -76,10 +81,18 @@ class WebUIConfig:
     session_timeout: int = int(os.getenv("WEBUI_SESSION_TIMEOUT", 3600))
 
 @dataclass
+class MySQLConfig:
+    host: str = os.getenv("MYSQL_HOST", "localhost")
+    port: int = int(os.getenv("MYSQL_PORT", 3306))
+    user: str = os.getenv("MYSQL_USER", "ai-bot")
+    password: str = os.getenv("MYSQL_PASSWORD", "aibot123")
+    database: str = os.getenv("MYSQL_DATABASE", "ai-bot")
+
+@dataclass
 class AuthConfig:
     enabled: bool = os.getenv("AUTH_ENABLED", "true").lower() == "true"
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
-    admin_password_hash: str = os.getenv("ADMIN_PASSWORD_HASH", "")  # 存储哈希后的密码
+    admin_password: str = os.getenv("ADMIN_PASSWORD", "admin123")  # 默认密码从.env读取
     jwt_secret: str = os.getenv("JWT_SECRET", "jwt-secret-key")
     jwt_expiration: int = int(os.getenv("JWT_EXPIRATION", 86400))  # 24小时
 
@@ -123,6 +136,7 @@ class Config:
     multi_fs = MultiFSConfig()
     webui = WebUIConfig()
     auth = AuthConfig()
+    mysql = MySQLConfig()
     system = SystemConfig()
     
     # 日志配置

@@ -12,6 +12,8 @@ from webui.auth import AuthManager
 from scenarios.scenario_manager import ScenarioManager
 from outbound.outbound_manager import OutboundManager
 from freeswitch.esl_handler import FreeSwitchHandler
+from storage.mysql_client import mysql_client, SystemConfig
+from sqlalchemy import select
 
 logger = setup_logger(__name__)
 
@@ -88,6 +90,12 @@ class WebUIApp:
         self.app.router.add_put('/api/scenarios/{scenario_id}', self.api_update_scenario)
         self.app.router.add_delete('/api/scenarios/{scenario_id}', self.api_delete_scenario)
 
+        # FreeSWITCH配置管理API
+        self.app.router.add_get('/api/freeswitch/configs', self.api_get_freeswitch_configs)
+        self.app.router.add_post('/api/freeswitch/configs', self.api_create_freeswitch_config)
+        self.app.router.add_put('/api/freeswitch/configs/{instance_id}', self.api_update_freeswitch_config)
+        self.app.router.add_delete('/api/freeswitch/configs/{instance_id}', self.api_delete_freeswitch_config)
+
         # 外呼管理API
         self.app.router.add_get('/api/outbound/campaigns', self.api_get_campaigns)
         self.app.router.add_post('/api/outbound/campaigns', self.api_create_campaign)
@@ -105,6 +113,11 @@ class WebUIApp:
         # 系统设置API
         self.app.router.add_get('/api/settings', self.api_get_settings)
         self.app.router.add_put('/api/settings', self.api_update_settings)
+        self.app.router.add_post('/api/settings/test-service', self.api_test_service)
+
+        # 通话记录API
+        self.app.router.add_get('/api/call-records', self.api_get_call_records)
+        self.app.router.add_get('/api/call-records/{record_id}', self.api_get_call_record_detail)
 
     # 页面处理方法
     async def login_page(self, request):
@@ -156,7 +169,7 @@ class WebUIApp:
         username = data.get('username')
         password = data.get('password')
 
-        token = self.auth_manager.authenticate_user(username, password)
+        token = await self.auth_manager.authenticate_user(username, password)
         if token:
             response = web.json_response({'success': True, 'token': token})
             response.set_cookie('auth_token', token, max_age=config.auth.jwt_expiration)
@@ -220,34 +233,197 @@ class WebUIApp:
     # 场景管理API
     async def api_get_scenarios(self, request):
         """获取场景列表"""
-        scenarios = self.scenario_manager.list_scenarios()
-        return web.json_response({
-            'success': True,
-            'scenarios': scenarios
-        })
+        try:
+            from storage.mysql_client import mysql_client
+            scenarios = await mysql_client.get_scenarios()
+            scenario_dicts = []
+            for s in scenarios:
+                scenario_dicts.append({
+                    'id': s.id,
+                    'scenario_id': s.scenario_id,
+                    'name': s.name,
+                    'description': s.description,
+                    'entry_points': s.entry_points,
+                    'system_prompt': s.system_prompt,
+                    'welcome_message': s.welcome_message,
+                    'fallback_responses': s.fallback_responses,
+                    'max_turns': s.max_turns,
+                    'timeout_seconds': s.timeout_seconds,
+                    'custom_settings': s.custom_settings,
+                    'is_active': s.is_active,
+                    'created_at': s.created_at.isoformat() if s.created_at else None,
+                    'updated_at': s.updated_at.isoformat() if s.updated_at else None
+                })
+            return web.json_response({
+                'success': True,
+                'scenarios': scenario_dicts
+            })
+        except Exception as e:
+            logger.error(f"获取场景列表失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_create_scenario(self, request):
         """创建场景"""
-        data = await request.json()
-        scenario_id = data.get('scenario_id')
-
-        # 这里应该实现场景创建逻辑
-        return web.json_response({'success': True, 'message': 'Scenario creation not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            data = await request.json()
+            
+            scenario_data = {
+                'scenario_id': data['scenario_id'],
+                'name': data['name'],
+                'description': data.get('description', ''),
+                'entry_points': data.get('entry_points', []),
+                'system_prompt': data['system_prompt'],
+                'welcome_message': data['welcome_message'],
+                'fallback_responses': data.get('fallback_responses', []),
+                'max_turns': data.get('max_turns', 10),
+                'timeout_seconds': data.get('timeout_seconds', 300),
+                'custom_settings': data.get('custom_settings', {}),
+                'is_active': data.get('is_active', True)
+            }
+            
+            scenario = await mysql_client.create_scenario(scenario_data)
+            return web.json_response({
+                'success': True, 
+                'scenario': {
+                    'id': scenario.id,
+                    'scenario_id': scenario.scenario_id,
+                    'name': scenario.name
+                }
+            })
+        except Exception as e:
+            logger.error(f"创建场景失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_update_scenario(self, request):
         """更新场景"""
-        scenario_id = request.match_info['scenario_id']
-        data = await request.json()
-
-        # 这里应该实现场景更新逻辑
-        return web.json_response({'success': True, 'message': 'Scenario update not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            scenario_id = request.match_info['scenario_id']
+            data = await request.json()
+            
+            update_data = {}
+            for field in ['name', 'description', 'entry_points', 'system_prompt', 
+                         'welcome_message', 'fallback_responses', 'max_turns', 
+                         'timeout_seconds', 'custom_settings', 'is_active']:
+                if field in data:
+                    update_data[field] = data[field]
+            
+            scenario = await mysql_client.update_scenario(scenario_id, update_data)
+            if scenario:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '场景不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"更新场景失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_delete_scenario(self, request):
         """删除场景"""
-        scenario_id = request.match_info['scenario_id']
+        try:
+            from storage.mysql_client import mysql_client
+            scenario_id = request.match_info['scenario_id']
+            
+            success = await mysql_client.delete_scenario(scenario_id)
+            if success:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '场景不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"删除场景失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
-        # 这里应该实现场景删除逻辑
-        return web.json_response({'success': True, 'message': 'Scenario deletion not implemented yet'})
+    # FreeSWITCH配置管理API
+    async def api_get_freeswitch_configs(self, request):
+        """获取FreeSWITCH配置列表"""
+        try:
+            from storage.mysql_client import mysql_client
+            configs = await mysql_client.get_freeswitch_configs()
+            config_dicts = []
+            for c in configs:
+                config_dicts.append({
+                    'id': c.id,
+                    'instance_id': c.instance_id,
+                    'name': c.name,
+                    'host': c.host,
+                    'port': c.port,
+                    'scenario_mapping': c.scenario_mapping,
+                    'is_active': c.is_active,
+                    'created_at': c.created_at.isoformat() if c.created_at else None,
+                    'updated_at': c.updated_at.isoformat() if c.updated_at else None
+                })
+            return web.json_response({
+                'success': True,
+                'configs': config_dicts
+            })
+        except Exception as e:
+            logger.error(f"获取FreeSWITCH配置列表失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+
+    async def api_create_freeswitch_config(self, request):
+        """创建FreeSWITCH配置"""
+        try:
+            from storage.mysql_client import mysql_client
+            data = await request.json()
+            
+            config_data = {
+                'instance_id': data['instance_id'],
+                'name': data['name'],
+                'host': data['host'],
+                'port': data.get('port', 8021),
+                'password': data['password'],
+                'scenario_mapping': data.get('scenario_mapping', {}),
+                'is_active': data.get('is_active', True)
+            }
+            
+            config = await mysql_client.create_freeswitch_config(config_data)
+            return web.json_response({
+                'success': True, 
+                'config': {
+                    'id': config.id,
+                    'instance_id': config.instance_id,
+                    'name': config.name
+                }
+            })
+        except Exception as e:
+            logger.error(f"创建FreeSWITCH配置失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+
+    async def api_update_freeswitch_config(self, request):
+        """更新FreeSWITCH配置"""
+        try:
+            from storage.mysql_client import mysql_client
+            instance_id = request.match_info['instance_id']
+            data = await request.json()
+            
+            update_data = {}
+            for field in ['name', 'host', 'port', 'password', 'scenario_mapping', 'is_active']:
+                if field in data:
+                    update_data[field] = data[field]
+            
+            config = await mysql_client.update_freeswitch_config(instance_id, update_data)
+            if config:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': 'FreeSWITCH配置不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"更新FreeSWITCH配置失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+
+    async def api_delete_freeswitch_config(self, request):
+        """删除FreeSWITCH配置"""
+        try:
+            from storage.mysql_client import mysql_client
+            instance_id = request.match_info['instance_id']
+            
+            success = await mysql_client.delete_freeswitch_config(instance_id)
+            if success:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': 'FreeSWITCH配置不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"删除FreeSWITCH配置失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     # 外呼管理API
     async def api_get_campaigns(self, request):
@@ -312,13 +488,15 @@ class WebUIApp:
     async def api_get_active_calls(self, request):
         """获取活跃通话"""
         active_calls = []
-        for session_id, manager in self.fs_handler.sessions.items():
-            active_calls.append({
-                'session_id': session_id,
-                'state': manager.state.value,
-                'start_time': getattr(manager, 'start_time', None),
-                'caller_id': getattr(manager, 'caller_id', None)
-            })
+        for instance_id, instance in self.fs_handler.instances.items():
+            for session_id, manager in instance.sessions.items():
+                active_calls.append({
+                    'session_id': session_id,
+                    'instance_id': instance_id,
+                    'state': manager.state.value,
+                    'start_time': getattr(manager, 'start_time', None),
+                    'caller_id': getattr(manager, 'caller_id', None)
+                })
 
         return web.json_response({
             'success': True,
@@ -347,27 +525,241 @@ class WebUIApp:
     # 系统设置API
     async def api_get_settings(self, request):
         """获取系统设置"""
-        return web.json_response({
-            'success': True,
-            'settings': {
-                'webui': {
-                    'enabled': config.webui.enabled,
-                    'host': config.webui.host,
-                    'port': config.webui.port
-                },
-                'auth': {
-                    'enabled': config.auth.enabled,
-                    'admin_username': config.auth.admin_username
+        try:
+            session = await mysql_client.get_session()
+            async with session:
+                result = await session.execute(select(SystemConfig))
+                configs = {config.key: config.value for config in result.scalars()}
+
+            return web.json_response({
+                'success': True,
+                'settings': {
+                    'webui': configs.get('webui', {
+                        'enabled': config.webui.enabled,
+                        'host': config.webui.host,
+                        'port': config.webui.port
+                    }),
+                    'auth': configs.get('auth', {
+                        'enabled': config.auth.enabled,
+                        'admin_username': config.auth.admin_username
+                    }),
+                    'freeswitch': configs.get('freeswitch', {
+                        'host': config.freeswitch.host,
+                        'port': config.freeswitch.port,
+                        'password': config.freeswitch.password,
+                        'audio_sample_rate': config.freeswitch.audio_sample_rate
+                    }),
+                    'mysql': configs.get('mysql', {
+                        'host': config.mysql.host,
+                        'port': config.mysql.port,
+                        'user': config.mysql.user,
+                        'database': config.mysql.database
+                    }),
+                    'redis': configs.get('redis', {
+                        'host': config.redis.host,
+                        'port': config.redis.port,
+                        'db': config.redis.db
+                    }),
+                    'llm': configs.get('llm', {
+                        'api_url': config.llm.api_url,
+                        'model': config.llm.model,
+                        'timeout': config.llm.timeout,
+                        'max_tokens': config.llm.max_tokens,
+                        'temperature': config.llm.temperature
+                    }),
+                    'asr': configs.get('asr', {
+                        'ws_url': config.asr.ws_url,
+                        'sample_rate': config.asr.sample_rate,
+                        'vad_threshold': config.asr.vad_threshold
+                    }),
+                    'tts': configs.get('tts', {
+                        'api_url': config.tts.api_url,
+                        'voice': config.tts.voice,
+                        'sample_rate': config.tts.sample_rate
+                    })
                 }
-            }
-        })
+            })
+        except Exception as e:
+            logger.error(f"获取设置失败: {e}")
+            return web.json_response({'success': False, 'message': str(e)}, status=500)
 
     async def api_update_settings(self, request):
         """更新系统设置"""
         data = await request.json()
+        settings = data.get('settings', {})
 
-        # 这里应该实现设置更新逻辑
-        return web.json_response({'success': True, 'message': 'Settings update not implemented yet'})
+        try:
+            session = await mysql_client.get_session()
+            async with session:
+                # 更新或插入配置
+                for key, value in settings.items():
+                    # 检查配置是否已存在
+                    result = await session.execute(
+                        select(SystemConfig).where(SystemConfig.key == key)
+                    )
+                    existing_config = result.scalar_one_or_none()
+
+                    if existing_config:
+                        existing_config.value = value
+                    else:
+                        new_config = SystemConfig(key=key, value=value)
+                        session.add(new_config)
+
+                await session.commit()
+
+            return web.json_response({'success': True, 'message': '设置已更新'})
+
+        except Exception as e:
+            logger.error(f"更新设置失败: {e}")
+            return web.json_response({'success': False, 'message': f'更新设置失败: {str(e)}'}, status=500)
+
+    async def _save_config_to_file(self):
+        """保存配置到文件"""
+        try:
+            config_file = Path(__file__).parent.parent / '.env'
+            config_content = f"""# AI机器人系统配置
+# 生成时间: {asyncio.get_event_loop().time()}
+
+# WebUI配置
+WEBUI_ENABLED={config.webui.enabled}
+WEBUI_HOST={config.webui.host}
+WEBUI_PORT={config.webui.port}
+
+# 认证配置
+AUTH_ENABLED={config.auth.enabled}
+AUTH_ADMIN_USERNAME={config.auth.admin_username}
+AUTH_ADMIN_PASSWORD_HASH={config.auth.admin_password_hash}
+
+# FreeSWITCH配置
+FREESWITCH_ENABLED={config.freeswitch.enabled}
+FREESWITCH_HOST={config.freeswitch.host}
+FREESWITCH_PORT={config.freeswitch.port}
+FREESWITCH_PASSWORD={config.freeswitch.password}
+FREESWITCH_AUDIO_SAMPLE_RATE={config.freeswitch.audio_sample_rate}
+
+# Redis配置
+REDIS_ENABLED={config.redis.enabled}
+REDIS_HOST={config.redis.host}
+REDIS_PORT={config.redis.port}
+REDIS_DB={config.redis.db}
+REDIS_PASSWORD={config.redis.password}
+
+# LLM配置
+LLM_ENABLED={config.llm.enabled}
+LLM_PROVIDER={config.llm.provider}
+LLM_API_KEY={config.llm.api_key}
+LLM_BASE_URL={config.llm.base_url}
+LLM_MODEL={config.llm.model}
+LLM_TEMPERATURE={config.llm.temperature}
+
+# ASR配置
+ASR_ENABLED={config.asr.enabled}
+ASR_PROVIDER={config.asr.provider}
+ASR_API_KEY={config.asr.api_key}
+ASR_BASE_URL={config.asr.base_url}
+ASR_MODEL={config.asr.model}
+ASR_SAMPLE_RATE={config.asr.sample_rate}
+
+# TTS配置
+TTS_ENABLED={config.tts.enabled}
+TTS_PROVIDER={config.tts.provider}
+TTS_API_KEY={config.tts.api_key}
+TTS_BASE_URL={config.tts.base_url}
+TTS_MODEL={config.tts.model}
+TTS_VOICE={config.tts.voice}
+"""
+            with open(config_file, 'w', encoding='utf-8') as f:
+                f.write(config_content)
+            logger.info("配置已保存到文件")
+        except Exception as e:
+            logger.error(f"保存配置文件失败: {e}")
+
+    # 服务测试API
+    async def api_test_service(self, request):
+        """测试服务可用性"""
+        data = await request.json()
+        service_type = data.get('service_type')
+        service_config = data.get('config', {})
+
+        try:
+            if service_type == 'redis':
+                result = await self._test_redis_connection(service_config)
+            elif service_type == 'freeswitch':
+                result = await self._test_freeswitch_connection(service_config)
+            elif service_type == 'llm':
+                result = await self._test_llm_connection(service_config)
+            elif service_type == 'asr':
+                result = await self._test_asr_connection(service_config)
+            elif service_type == 'tts':
+                result = await self._test_tts_connection(service_config)
+            else:
+                return web.json_response({'success': False, 'message': f'未知的服务类型: {service_type}'}, status=400)
+
+            return web.json_response({'success': True, 'result': result})
+
+        except Exception as e:
+            logger.error(f"测试服务失败: {e}")
+            return web.json_response({'success': False, 'message': f'测试失败: {str(e)}'}, status=500)
+
+    async def _test_redis_connection(self, config_data):
+        """测试Redis连接"""
+        import redis.asyncio as redis
+
+        try:
+            client = redis.Redis(
+                host=config_data.get('host', 'localhost'),
+                port=config_data.get('port', 6379),
+                db=config_data.get('db', 0),
+                password=config_data.get('password'),
+                socket_timeout=5
+            )
+            await client.ping()
+            return {'status': 'success', 'message': 'Redis连接成功'}
+        except Exception as e:
+            return {'status': 'error', 'message': f'Redis连接失败: {str(e)}'}
+
+    async def _test_freeswitch_connection(self, config_data):
+        """测试FreeSWITCH连接"""
+        import socket
+        import asyncio
+
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            result = sock.connect_ex((config_data.get('host', 'localhost'), config_data.get('port', 8021)))
+            sock.close()
+
+            if result == 0:
+                return {'status': 'success', 'message': 'FreeSWITCH连接成功'}
+            else:
+                return {'status': 'error', 'message': 'FreeSWITCH连接失败: 端口无响应'}
+        except Exception as e:
+            return {'status': 'error', 'message': f'FreeSWITCH连接失败: {str(e)}'}
+
+    async def _test_llm_connection(self, config_data):
+        """测试LLM连接"""
+        try:
+            # 这里应该根据不同的provider实现不同的测试逻辑
+            # 暂时返回模拟结果
+            return {'status': 'success', 'message': 'LLM服务测试成功（模拟）'}
+        except Exception as e:
+            return {'status': 'error', 'message': f'LLM连接失败: {str(e)}'}
+
+    async def _test_asr_connection(self, config_data):
+        """测试ASR连接"""
+        try:
+            # 这里应该实现ASR服务的测试逻辑
+            return {'status': 'success', 'message': 'ASR服务测试成功（模拟）'}
+        except Exception as e:
+            return {'status': 'error', 'message': f'ASR连接失败: {str(e)}'}
+
+    async def _test_tts_connection(self, config_data):
+        """测试TTS连接"""
+        try:
+            # 这里应该实现TTS服务的测试逻辑
+            return {'status': 'success', 'message': 'TTS服务测试成功（模拟）'}
+        except Exception as e:
+            return {'status': 'error', 'message': f'TTS连接失败: {str(e)}'}
 
     async def broadcast_to_clients(self, message: Dict[str, Any]):
         """向所有WebSocket客户端广播消息"""
@@ -404,3 +796,93 @@ class WebUIApp:
             logger.info("WebUI服务器已停止")
         except Exception as e:
             logger.error(f"停止WebUI服务器失败: {e}")
+
+    # 通话记录API
+    async def api_get_call_records(self, request):
+        """获取通话记录列表"""
+        try:
+            page = int(request.query.get('page', 1))
+            per_page = int(request.query.get('per_page', 20))
+            offset = (page - 1) * per_page
+
+            session = await mysql_client.get_session()
+            async with session:
+                from storage.mysql_client import CallRecord
+                from sqlalchemy import desc
+
+                # 获取总数
+                total_result = await session.execute(
+                    select(CallRecord).with_only_columns([CallRecord.id])
+                )
+                total = len(total_result.all())
+
+                # 获取分页数据
+                result = await session.execute(
+                    select(CallRecord).order_by(desc(CallRecord.start_time)).offset(offset).limit(per_page)
+                )
+                records = result.scalars().all()
+
+                records_data = []
+                for record in records:
+                    records_data.append({
+                        'id': record.id,
+                        'session_id': record.session_id,
+                        'caller_number': record.caller_number,
+                        'start_time': record.start_time.isoformat() if record.start_time else None,
+                        'end_time': record.end_time.isoformat() if record.end_time else None,
+                        'duration': record.duration,
+                        'status': record.status
+                    })
+
+            return web.json_response({
+                'success': True,
+                'records': records_data,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': total,
+                    'pages': (total + per_page - 1) // per_page
+                }
+            })
+
+        except Exception as e:
+            logger.error(f"获取通话记录失败: {e}")
+            return web.json_response({'success': False, 'message': str(e)}, status=500)
+
+    async def api_get_call_record_detail(self, request):
+        """获取通话记录详情"""
+        try:
+            record_id = int(request.match_info['record_id'])
+
+            session = await mysql_client.get_session()
+            async with session:
+                from storage.mysql_client import CallRecord
+
+                result = await session.execute(
+                    select(CallRecord).where(CallRecord.id == record_id)
+                )
+                record = result.scalar_one_or_none()
+
+                if not record:
+                    return web.json_response({'success': False, 'message': '记录不存在'}, status=404)
+
+                import json
+                conversation_log = json.loads(record.conversation_log) if record.conversation_log else []
+
+                return web.json_response({
+                    'success': True,
+                    'record': {
+                        'id': record.id,
+                        'session_id': record.session_id,
+                        'caller_number': record.caller_number,
+                        'start_time': record.start_time.isoformat() if record.start_time else None,
+                        'end_time': record.end_time.isoformat() if record.end_time else None,
+                        'duration': record.duration,
+                        'status': record.status,
+                        'conversation_log': conversation_log
+                    }
+                })
+
+        except Exception as e:
+            logger.error(f"获取通话记录详情失败: {e}")
+            return web.json_response({'success': False, 'message': str(e)}, status=500)

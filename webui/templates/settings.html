@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统设置 - AI机器人管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .service-card {
+            transition: all 0.3s ease;
+        }
+        .service-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-success { background-color: #28a745; }
+        .status-error { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+        .test-result {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            display: none;
+        }
+        .test-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .test-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/dashboard">
+                <i class="bi bi-robot"></i> AI机器人管理系统
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">仪表板</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/freeswitch">FreeSWITCH</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/scenarios">场景管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/outbound">外呼管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring">监控</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/settings">设置</a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="logout()">登出</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h2><i class="bi bi-gear"></i> 系统设置</h2>
+                <p class="text-muted">配置和管理各种服务参数</p>
+            </div>
+        </div>
+
+        <!-- 服务配置卡片 -->
+        <div class="row mt-4">
+            <!-- FreeSWITCH配置 -->
+            <div class="col-md-6 mb-4">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-telephone"></i> FreeSWITCH配置
+                            <span id="fs-status" class="status-indicator status-warning"></span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="freeswitch-form">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="fs-enabled">
+                                    <label class="form-check-label" for="fs-enabled">启用FreeSWITCH</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="fs-host" class="form-label">主机地址</label>
+                                    <input type="text" class="form-control" id="fs-host" placeholder="localhost">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="fs-port" class="form-label">端口</label>
+                                    <input type="number" class="form-control" id="fs-port" placeholder="8021">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="fs-password" class="form-label">密码</label>
+                                <input type="password" class="form-control" id="fs-password">
+                            </div>
+                            <div class="mb-3">
+                                <label for="fs-sample-rate" class="form-label">音频采样率</label>
+                                <input type="number" class="form-control" id="fs-sample-rate" placeholder="8000">
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" onclick="testService('freeswitch')">
+                                <i class="bi bi-play-circle"></i> 测试连接
+                            </button>
+                            <div id="fs-test-result" class="test-result"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Redis配置 -->
+            <div class="col-md-6 mb-4">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-database"></i> Redis配置
+                            <span id="redis-status" class="status-indicator status-warning"></span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="redis-form">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="redis-enabled">
+                                    <label class="form-check-label" for="redis-enabled">启用Redis</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <label for="redis-host" class="form-label">主机地址</label>
+                                    <input type="text" class="form-control" id="redis-host" placeholder="localhost">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="redis-port" class="form-label">端口</label>
+                                    <input type="number" class="form-control" id="redis-port" placeholder="6379">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="redis-db" class="form-label">数据库</label>
+                                    <input type="number" class="form-control" id="redis-db" placeholder="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="redis-password" class="form-label">密码</label>
+                                    <input type="password" class="form-control" id="redis-password">
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" onclick="testService('redis')">
+                                <i class="bi bi-play-circle"></i> 测试连接
+                            </button>
+                            <div id="redis-test-result" class="test-result"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- LLM配置 -->
+            <div class="col-md-6 mb-4">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-brain"></i> LLM配置
+                            <span id="llm-status" class="status-indicator status-warning"></span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="llm-form">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="llm-enabled">
+                                    <label class="form-check-label" for="llm-enabled">启用LLM</label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="llm-provider" class="form-label">提供商</label>
+                                <select class="form-control" id="llm-provider">
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="local">本地模型</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="llm-api-key" class="form-label">API密钥</label>
+                                <input type="password" class="form-control" id="llm-api-key">
+                            </div>
+                            <div class="mb-3">
+                                <label for="llm-base-url" class="form-label">基础URL</label>
+                                <input type="text" class="form-control" id="llm-base-url" placeholder="https://api.openai.com/v1">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="llm-model" class="form-label">模型</label>
+                                    <input type="text" class="form-control" id="llm-model" placeholder="gpt-3.5-turbo">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="llm-temperature" class="form-label">温度</label>
+                                    <input type="number" step="0.1" min="0" max="2" class="form-control" id="llm-temperature" placeholder="0.7">
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" onclick="testService('llm')">
+                                <i class="bi bi-play-circle"></i> 测试连接
+                            </button>
+                            <div id="llm-test-result" class="test-result"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ASR配置 -->
+            <div class="col-md-6 mb-4">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-mic"></i> ASR配置
+                            <span id="asr-status" class="status-indicator status-warning"></span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="asr-form">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="asr-enabled">
+                                    <label class="form-check-label" for="asr-enabled">启用ASR</label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="asr-provider" class="form-label">提供商</label>
+                                <select class="form-control" id="asr-provider">
+                                    <option value="openai">OpenAI Whisper</option>
+                                    <option value="azure">Azure Speech</option>
+                                    <option value="local">本地模型</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="asr-api-key" class="form-label">API密钥</label>
+                                <input type="password" class="form-control" id="asr-api-key">
+                            </div>
+                            <div class="mb-3">
+                                <label for="asr-base-url" class="form-label">基础URL</label>
+                                <input type="text" class="form-control" id="asr-base-url">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="asr-model" class="form-label">模型</label>
+                                    <input type="text" class="form-control" id="asr-model" placeholder="whisper-1">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="asr-sample-rate" class="form-label">采样率</label>
+                                    <input type="number" class="form-control" id="asr-sample-rate" placeholder="16000">
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" onclick="testService('asr')">
+                                <i class="bi bi-play-circle"></i> 测试连接
+                            </button>
+                            <div id="asr-test-result" class="test-result"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- TTS配置 -->
+            <div class="col-md-6 mb-4">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-volume-up"></i> TTS配置
+                            <span id="tts-status" class="status-indicator status-warning"></span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="tts-form">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="tts-enabled">
+                                    <label class="form-check-label" for="tts-enabled">启用TTS</label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="tts-provider" class="form-label">提供商</label>
+                                <select class="form-control" id="tts-provider">
+                                    <option value="openai">OpenAI TTS</option>
+                                    <option value="azure">Azure Speech</option>
+                                    <option value="local">本地模型</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="tts-api-key" class="form-label">API密钥</label>
+                                <input type="password" class="form-control" id="tts-api-key">
+                            </div>
+                            <div class="mb-3">
+                                <label for="tts-base-url" class="form-label">基础URL</label>
+                                <input type="text" class="form-control" id="tts-base-url">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="tts-model" class="form-label">模型</label>
+                                    <input type="text" class="form-control" id="tts-model" placeholder="tts-1">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="tts-voice" class="form-label">语音</label>
+                                    <input type="text" class="form-control" id="tts-voice" placeholder="alloy">
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" onclick="testService('tts')">
+                                <i class="bi bi-play-circle"></i> 测试连接
+                            </button>
+                            <div id="tts-test-result" class="test-result"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WebUI配置 -->
+            <div class="col-md-6 mb-4">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-window"></i> WebUI配置
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="webui-form">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="webui-enabled" checked disabled>
+                                    <label class="form-check-label" for="webui-enabled">启用WebUI</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <label for="webui-host" class="form-label">主机地址</label>
+                                    <input type="text" class="form-control" id="webui-host" placeholder="0.0.0.0">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="webui-port" class="form-label">端口</label>
+                                    <input type="number" class="form-control" id="webui-port" placeholder="8080">
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 保存按钮 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <button type="button" class="btn btn-success btn-lg" onclick="saveSettings()">
+                    <i class="bi bi-check-circle"></i> 保存所有设置
+                </button>
+                <div id="save-result" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 页面加载时获取当前设置
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSettings();
+        });
+
+        // 加载设置
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+
+                if (data.success) {
+                    const settings = data.settings;
+
+                    // FreeSWITCH
+                    document.getElementById('fs-enabled').checked = settings.freeswitch.enabled;
+                    document.getElementById('fs-host').value = settings.freeswitch.host;
+                    document.getElementById('fs-port').value = settings.freeswitch.port;
+                    document.getElementById('fs-password').value = settings.freeswitch.password;
+                    document.getElementById('fs-sample-rate').value = settings.freeswitch.audio_sample_rate;
+
+                    // Redis
+                    document.getElementById('redis-enabled').checked = settings.redis.enabled;
+                    document.getElementById('redis-host').value = settings.redis.host;
+                    document.getElementById('redis-port').value = settings.redis.port;
+                    document.getElementById('redis-db').value = settings.redis.db;
+                    document.getElementById('redis-password').value = settings.redis.password;
+
+                    // LLM
+                    document.getElementById('llm-enabled').checked = settings.llm.enabled;
+                    document.getElementById('llm-provider').value = settings.llm.provider;
+                    document.getElementById('llm-api-key').value = settings.llm.api_key;
+                    document.getElementById('llm-base-url').value = settings.llm.base_url;
+                    document.getElementById('llm-model').value = settings.llm.model;
+                    document.getElementById('llm-temperature').value = settings.llm.temperature;
+
+                    // ASR
+                    document.getElementById('asr-enabled').checked = settings.asr.enabled;
+                    document.getElementById('asr-provider').value = settings.asr.provider;
+                    document.getElementById('asr-api-key').value = settings.asr.api_key;
+                    document.getElementById('asr-base-url').value = settings.asr.base_url;
+                    document.getElementById('asr-model').value = settings.asr.model;
+                    document.getElementById('asr-sample-rate').value = settings.asr.sample_rate;
+
+                    // TTS
+                    document.getElementById('tts-enabled').checked = settings.tts.enabled;
+                    document.getElementById('tts-provider').value = settings.tts.provider;
+                    document.getElementById('tts-api-key').value = settings.tts.api_key;
+                    document.getElementById('tts-base-url').value = settings.tts.base_url;
+                    document.getElementById('tts-model').value = settings.tts.model;
+                    document.getElementById('tts-voice').value = settings.tts.voice;
+
+                    // WebUI
+                    document.getElementById('webui-host').value = settings.webui.host;
+                    document.getElementById('webui-port').value = settings.webui.port;
+                }
+            } catch (error) {
+                console.error('加载设置失败:', error);
+                showAlert('加载设置失败', 'danger');
+            }
+        }
+
+        // 保存设置
+        async function saveSettings() {
+            const settings = {
+                freeswitch: {
+                    enabled: document.getElementById('fs-enabled').checked,
+                    host: document.getElementById('fs-host').value,
+                    port: parseInt(document.getElementById('fs-port').value),
+                    password: document.getElementById('fs-password').value,
+                    audio_sample_rate: parseInt(document.getElementById('fs-sample-rate').value)
+                },
+                redis: {
+                    enabled: document.getElementById('redis-enabled').checked,
+                    host: document.getElementById('redis-host').value,
+                    port: parseInt(document.getElementById('redis-port').value),
+                    db: parseInt(document.getElementById('redis-db').value),
+                    password: document.getElementById('redis-password').value
+                },
+                llm: {
+                    enabled: document.getElementById('llm-enabled').checked,
+                    provider: document.getElementById('llm-provider').value,
+                    api_key: document.getElementById('llm-api-key').value,
+                    base_url: document.getElementById('llm-base-url').value,
+                    model: document.getElementById('llm-model').value,
+                    temperature: parseFloat(document.getElementById('llm-temperature').value)
+                },
+                asr: {
+                    enabled: document.getElementById('asr-enabled').checked,
+                    provider: document.getElementById('asr-provider').value,
+                    api_key: document.getElementById('asr-api-key').value,
+                    base_url: document.getElementById('asr-base-url').value,
+                    model: document.getElementById('asr-model').value,
+                    sample_rate: parseInt(document.getElementById('asr-sample-rate').value)
+                },
+                tts: {
+                    enabled: document.getElementById('tts-enabled').checked,
+                    provider: document.getElementById('tts-provider').value,
+                    api_key: document.getElementById('tts-api-key').value,
+                    base_url: document.getElementById('tts-base-url').value,
+                    model: document.getElementById('tts-model').value,
+                    voice: document.getElementById('tts-voice').value
+                }
+            };
+
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ settings })
+                });
+
+                const result = await response.json();
+                const resultDiv = document.getElementById('save-result');
+
+                if (result.success) {
+                    resultDiv.className = 'alert alert-success';
+                    resultDiv.textContent = result.message;
+                } else {
+                    resultDiv.className = 'alert alert-danger';
+                    resultDiv.textContent = result.message;
+                }
+
+                resultDiv.style.display = 'block';
+                setTimeout(() => {
+                    resultDiv.style.display = 'none';
+                }, 5000);
+
+            } catch (error) {
+                console.error('保存设置失败:', error);
+                const resultDiv = document.getElementById('save-result');
+                resultDiv.className = 'alert alert-danger';
+                resultDiv.textContent = '保存设置失败: ' + error.message;
+                resultDiv.style.display = 'block';
+            }
+        }
+
+        // 测试服务
+        async function testService(serviceType) {
+            const config = getServiceConfig(serviceType);
+            const resultDiv = document.getElementById(`${serviceType}-test-result`);
+
+            try {
+                const response = await fetch('/api/settings/test-service', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        service_type: serviceType,
+                        config: config
+                    })
+                });
+
+                const result = await response.json();
+
+                resultDiv.style.display = 'block';
+                if (result.success && result.result.status === 'success') {
+                    resultDiv.className = 'test-result test-success';
+                    resultDiv.textContent = result.result.message;
+                    updateStatusIndicator(serviceType, 'success');
+                } else {
+                    resultDiv.className = 'test-result test-error';
+                    resultDiv.textContent = result.result ? result.result.message : result.message;
+                    updateStatusIndicator(serviceType, 'error');
+                }
+
+            } catch (error) {
+                console.error('测试服务失败:', error);
+                resultDiv.className = 'test-result test-error';
+                resultDiv.textContent = '测试失败: ' + error.message;
+                resultDiv.style.display = 'block';
+                updateStatusIndicator(serviceType, 'error');
+            }
+        }
+
+        // 获取服务配置
+        function getServiceConfig(serviceType) {
+            const config = {};
+
+            if (serviceType === 'freeswitch') {
+                config.host = document.getElementById('fs-host').value;
+                config.port = parseInt(document.getElementById('fs-port').value);
+                config.password = document.getElementById('fs-password').value;
+            } else if (serviceType === 'redis') {
+                config.host = document.getElementById('redis-host').value;
+                config.port = parseInt(document.getElementById('redis-port').value);
+                config.db = parseInt(document.getElementById('redis-db').value);
+                config.password = document.getElementById('redis-password').value;
+            } else if (serviceType === 'llm') {
+                config.provider = document.getElementById('llm-provider').value;
+                config.api_key = document.getElementById('llm-api-key').value;
+                config.base_url = document.getElementById('llm-base-url').value;
+                config.model = document.getElementById('llm-model').value;
+                config.temperature = parseFloat(document.getElementById('llm-temperature').value);
+            } else if (serviceType === 'asr') {
+                config.provider = document.getElementById('asr-provider').value;
+                config.api_key = document.getElementById('asr-api-key').value;
+                config.base_url = document.getElementById('asr-base-url').value;
+                config.model = document.getElementById('asr-model').value;
+                config.sample_rate = parseInt(document.getElementById('asr-sample-rate').value);
+            } else if (serviceType === 'tts') {
+                config.provider = document.getElementById('tts-provider').value;
+                config.api_key = document.getElementById('tts-api-key').value;
+                config.base_url = document.getElementById('tts-base-url').value;
+                config.model = document.getElementById('tts-model').value;
+                config.voice = document.getElementById('tts-voice').value;
+            }
+
+            return config;
+        }
+
+        // 更新状态指示器
+        function updateStatusIndicator(serviceType, status) {
+            const indicator = document.getElementById(`${serviceType}-status`);
+            indicator.className = `status-indicator status-${status}`;
+        }
+
+        // 登出
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('登出失败:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // 显示提示消息
+        function showAlert(message, type = 'info') {
+            // 这里可以实现一个全局的提示消息系统
+            console.log(`${type}: ${message}`);
+        }
+    </script>
+</body>
+</html>

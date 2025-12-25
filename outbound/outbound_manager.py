@@ -88,7 +88,8 @@ class OutboundTask:
 class OutboundManager:
     """外呼管理器"""
 
-    def __init__(self):
+    def __init__(self, fs_handler=None):
+        self.fs_handler = fs_handler
         self.tasks: Dict[str, OutboundTask] = {}
         self.active_calls: Dict[str, ConversationManager] = {}
         self.running = False

@@ -52,11 +52,11 @@
                                 <thead>
                                     <tr>
                                         <th>实例ID</th>
+                                        <th>名称</th>
                                         <th>主机地址</th>
                                         <th>端口</th>
                                         <th>状态</th>
-                                        <th>启用的场景</th>
-                                        <th>描述</th>
+                                        <th>场景映射</th>
                                         <th>操作</th>
                                     </tr>
                                 </thead>
@@ -84,6 +84,12 @@
                         <div class="mb-3">
                             <label class="form-label">实例ID</label>
                             <input type="text" class="form-control" name="instance_id" required>
+                            <div class="form-text">唯一标识符，用于区分不同的FreeSWITCH实例</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">实例名称</label>
+                            <input type="text" class="form-control" name="name" required>
+                            <div class="form-text">显示名称，便于识别</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">主机地址</label>
@@ -98,17 +104,26 @@
                             <input type="password" class="form-control" name="password" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">启用的场景</label>
-                            <select multiple class="form-select" name="enabled_scenarios">
-                                <option value="default">默认场景</option>
-                                <option value="sales">销售场景</option>
-                                <option value="support">客服场景</option>
-                                <option value="survey">调研场景</option>
-                            </select>
+                            <label class="form-label">场景映射</label>
+                            <div id="scenario-mapping-container">
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control" placeholder="入口点" name="entry_point">
+                                    <select class="form-select" name="scenario_id">
+                                        <option value="">选择场景...</option>
+                                    </select>
+                                    <button type="button" class="btn btn-outline-danger" onclick="removeMapping(this)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addMapping()">
+                                <i class="bi bi-plus"></i> 添加映射
+                            </button>
+                            <div class="form-text">将入口点映射到特定的场景</div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">描述</label>
-                            <textarea class="form-control" name="description" rows="3"></textarea>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" name="is_active" checked>
+                            <label class="form-check-label">启用实例</label>
                         </div>
                     </form>
                 </div>
@@ -124,30 +139,80 @@
     <script>
         // 页面加载时获取数据
         document.addEventListener('DOMContentLoaded', function() {
+            loadScenarios();
             loadInstances();
         });
 
+        let availableScenarios = [];
+
+        async function loadScenarios() {
+            try {
+                const response = await fetch('/api/scenarios');
+                const data = await response.json();
+                if (data.success) {
+                    availableScenarios = data.scenarios;
+                    updateScenarioSelects();
+                }
+            } catch (error) {
+                console.error('加载场景列表失败:', error);
+            }
+        }
+
+        function updateScenarioSelects() {
+            const selects = document.querySelectorAll('select[name="scenario_id"]');
+            selects.forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">选择场景...</option>';
+                availableScenarios.forEach(scenario => {
+                    const option = document.createElement('option');
+                    option.value = scenario.scenario_id;
+                    option.textContent = scenario.name;
+                    if (currentValue === scenario.scenario_id) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            });
+        }
+
         async function loadInstances() {
             try {
-                const response = await fetch('/api/freeswitch/instances');
+                const response = await fetch('/api/freeswitch/configs');
                 const data = await response.json();
 
                 if (data.success) {
                     const tbody = document.getElementById('instances-tbody');
                     tbody.innerHTML = '';
 
-                    for (const [instanceId, instance] of Object.entries(data.instances)) {
+                    data.configs.forEach(config => {
+                        const mappingText = Object.entries(config.scenario_mapping || {})
+                            .map(([entry, scenario]) => `${entry} → ${scenario}`)
+                            .join(', ');
+
                         const row = document.createElement('tr');
                         row.innerHTML = `
-                            <td>${instanceId}</td>
-                            <td>${instance.host}</td>
-                            <td>${instance.port}</td>
-                            <td><span class="badge bg-secondary">未连接</span></td>
-                            <td>${instance.enabled_scenarios ? instance.enabled_scenarios.join(', ') : ''}</td>
-                            <td>${instance.description || ''}</td>
+                            <td>${config.instance_id}</td>
+                            <td>${config.name}</td>
+                            <td>${config.host}</td>
+                            <td>${config.port}</td>
+                            <td><span class="badge ${config.is_active ? 'bg-success' : 'bg-secondary'}">${config.is_active ? '启用' : '禁用'}</span></td>
+                            <td>${mappingText || '无映射'}</td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="editInstance('${instanceId}')">
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="editInstance('${config.instance_id}')">
                                     <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteInstance('${config.instance_id}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('加载实例列表失败:', error);
+            }
+        }
                                 </button>
                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteInstance('${instanceId}')">
                                     <i class="bi bi-trash"></i>
@@ -165,17 +230,32 @@
         async function addInstance() {
             const form = document.getElementById('add-instance-form');
             const formData = new FormData(form);
+            
+            // 构建场景映射对象
+            const mappingContainer = document.getElementById('scenario-mapping-container');
+            const mappingRows = mappingContainer.querySelectorAll('.input-group');
+            const scenarioMapping = {};
+            
+            mappingRows.forEach(row => {
+                const entryPoint = row.querySelector('[name="entry_point"]').value.trim();
+                const scenarioId = row.querySelector('[name="scenario_id"]').value;
+                if (entryPoint && scenarioId) {
+                    scenarioMapping[entryPoint] = scenarioId;
+                }
+            });
+            
             const data = {
                 instance_id: formData.get('instance_id'),
+                name: formData.get('name'),
                 host: formData.get('host'),
                 port: parseInt(formData.get('port')),
                 password: formData.get('password'),
-                enabled_scenarios: Array.from(form.querySelector('[name="enabled_scenarios"]').selectedOptions).map(opt => opt.value),
-                description: formData.get('description')
+                scenario_mapping: scenarioMapping,
+                is_active: form.querySelector('[name="is_active"]').checked
             };
 
             try {
-                const response = await fetch('/api/freeswitch/instances', {
+                const response = await fetch('/api/freeswitch/configs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -185,9 +265,22 @@
                 if (result.success) {
                     bootstrap.Modal.getInstance(document.getElementById('addInstanceModal')).hide();
                     form.reset();
+                    // 重置场景映射
+                    document.getElementById('scenario-mapping-container').innerHTML = `
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control" placeholder="入口点" name="entry_point">
+                            <select class="form-select" name="scenario_id">
+                                <option value="">选择场景...</option>
+                            </select>
+                            <button type="button" class="btn btn-outline-danger" onclick="removeMapping(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    updateScenarioSelects();
                     loadInstances();
                 } else {
-                    alert('添加失败: ' + result.message);
+                    alert('添加失败: ' + (result.error || '未知错误'));
                 }
             } catch (error) {
                 console.error('添加实例失败:', error);
@@ -196,10 +289,10 @@
         }
 
         async function deleteInstance(instanceId) {
-            if (!confirm('确定要删除这个实例吗？')) return;
+            if (!confirm('确定要删除这个FreeSWITCH实例吗？')) return;
 
             try {
-                const response = await fetch(`/api/freeswitch/instances/${instanceId}`, {
+                const response = await fetch(`/api/freeswitch/configs/${instanceId}`, {
                     method: 'DELETE'
                 });
 
@@ -207,7 +300,7 @@
                 if (result.success) {
                     loadInstances();
                 } else {
-                    alert('删除失败: ' + result.message);
+                    alert('删除失败: ' + (result.error || '未知错误'));
                 }
             } catch (error) {
                 console.error('删除实例失败:', error);
@@ -215,8 +308,36 @@
             }
         }
 
+        function addMapping() {
+            const container = document.getElementById('scenario-mapping-container');
+            const newMapping = document.createElement('div');
+            newMapping.className = 'input-group mb-2';
+            newMapping.innerHTML = `
+                <input type="text" class="form-control" placeholder="入口点" name="entry_point">
+                <select class="form-select" name="scenario_id">
+                    <option value="">选择场景...</option>
+                </select>
+                <button type="button" class="btn btn-outline-danger" onclick="removeMapping(this)">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `;
+            container.appendChild(newMapping);
+            updateScenarioSelects();
+        }
+
+        function removeMapping(button) {
+            const mappingRow = button.closest('.input-group');
+            if (document.querySelectorAll('#scenario-mapping-container .input-group').length > 1) {
+                mappingRow.remove();
+            } else {
+                // 如果是最后一个，清空内容而不是删除
+                const inputs = mappingRow.querySelectorAll('input, select');
+                inputs.forEach(input => input.value = '');
+            }
+        }
+
         function editInstance(instanceId) {
-            alert('编辑功能暂未实现');
+            alert('编辑功能将在后续版本中实现');
         }
 
         async function logout() {

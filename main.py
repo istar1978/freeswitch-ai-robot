@@ -4,16 +4,22 @@ import signal
 import sys
 import time
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 from config.settings import config
 from utils.logger import setup_logger
 from storage.redis_client import redis_client
+from storage.mysql_client import mysql_client
 from freeswitch.esl_handler import FreeSwitchHandler
 from freeswitch.dialplan_generator import DialplanGenerator
 from core.health_checker import HealthChecker
 from api.server import APIServer
 from tests.call_tester import CallTester
+from scenarios.scenario_manager import ScenarioManager
 from outbound.outbound_manager import OutboundManager
 from webui.app import WebUIApp
+
+# 加载环境变量
+load_dotenv()
 
 logger = setup_logger(__name__)
 
@@ -22,10 +28,10 @@ class AIRobotApplication:
         self.fs_handler = FreeSwitchHandler()
         self.health_checker = HealthChecker()
         self.dialplan_generator = DialplanGenerator()
-        self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
         self.call_tester = CallTester()
         self.outbound_manager = OutboundManager(self.fs_handler)
         self.scenario_manager = ScenarioManager()
+        self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
         self.webui_app = WebUIApp(self.fs_handler, self.scenario_manager, self.outbound_manager)
         self.running = False
         self.restart_count = 0
@@ -36,40 +42,86 @@ class AIRobotApplication:
         """启动应用"""
         logger.info("AI机器人应用启动中...")
 
+        # 非阻塞启动各个服务，即使失败也不影响主程序
+        startup_tasks = []
+
+        # 连接MySQL（必须先连接）
         try:
-            # 连接Redis
-            await redis_client.connect()
-
-            # 生成拨号计划文件
-            try:
-                self.dialplan_generator.save_dialplan_files()
-                logger.info("拨号计划文件生成成功")
-            except Exception as e:
-                logger.warning(f"拨号计划文件生成失败: {e}")
-
-            # 启动健康检查
-            asyncio.create_task(self.health_checker.start_monitoring())
-
-            # 启动FreeSWITCH处理器
-            await self.fs_handler.start()
-
-            # 启动API服务器
-            await self.api_server.start()
-
-            # 启动外呼管理器
-            await self.outbound_manager.start()
-
-            # 加载场景配置
-            await self.scenario_manager.load_scenarios()
-
-            # 启动WebUI服务器
-            await self.webui_app.start()
-
-            self.running = True
-            logger.info("AI机器人应用启动完成")
-
+            await mysql_client.connect()
+            logger.info("MySQL连接成功")
+            mysql_connected = True
         except Exception as e:
-            logger.error(f"应用启动失败: {e}")
+            logger.error(f"MySQL连接失败: {e}")
+            mysql_connected = False
+
+        # 连接Redis（非阻塞）
+        startup_tasks.append(self._safe_start_service("Redis", redis_client.connect()))
+
+        # 生成拨号计划文件（非阻塞）
+        startup_tasks.append(self._safe_start_service("拨号计划生成", self._generate_dialplan_files()))
+
+        # 启动健康检查（非阻塞）
+        startup_tasks.append(self._safe_start_service("健康检查", self.health_checker.start_monitoring()))
+
+        # 启动FreeSWITCH处理器（非阻塞）
+        startup_tasks.append(self._safe_start_service("FreeSWITCH处理器", self.fs_handler.start()))
+
+        # 启动API服务器
+        startup_tasks.append(self._safe_start_service("API服务器", self.api_server.start()))
+
+        # 启动外呼管理器（非阻塞）
+        startup_tasks.append(self._safe_start_service("外呼管理器", self.outbound_manager.start()))
+
+        # 加载场景配置（非阻塞）
+        startup_tasks.append(self._safe_start_service("场景配置", self._load_scenarios()))
+
+        # 启动WebUI服务器（这个必须成功）
+        try:
+            await self.webui_app.start()
+            # 初始化管理员用户（仅在MySQL连接成功时）
+            if mysql_connected:
+                await self.webui_app.auth_manager.initialize_admin_user()
+            else:
+                logger.warning("MySQL未连接，跳过管理员用户初始化")
+            logger.info("WebUI服务器启动成功")
+        except Exception as e:
+            logger.error(f"WebUI服务器启动失败: {e}")
+            raise
+
+        # 等待所有非关键服务启动完成，但不阻塞主程序
+        await asyncio.gather(*startup_tasks, return_exceptions=True)
+
+        self.running = True
+        logger.info("AI机器人应用启动完成（部分服务可能未就绪，可在WebUI中配置）")
+
+    async def _safe_start_service(self, service_name: str, coro):
+        """安全启动服务，失败不影响其他服务"""
+        try:
+            if asyncio.iscoroutine(coro):
+                await coro
+            else:
+                # 如果不是协程，直接执行
+                coro()
+            logger.info(f"{service_name}启动成功")
+        except Exception as e:
+            logger.warning(f"{service_name}启动失败: {e}（可在WebUI中重新配置）")
+
+    async def _load_scenarios(self):
+        """加载场景配置"""
+        try:
+            self.scenario_manager.load_scenarios()
+            logger.info("场景配置加载成功")
+        except Exception as e:
+            logger.warning(f"场景配置加载失败: {e}")
+            raise
+
+    async def _generate_dialplan_files(self):
+        """生成拨号计划文件"""
+        try:
+            await self.dialplan_generator.save_dialplan_files()
+            logger.info("拨号计划文件生成成功")
+        except Exception as e:
+            logger.warning(f"拨号计划文件生成失败: {e}")
             raise
 
     async def shutdown(self, signal_name: str = None):
@@ -82,6 +134,7 @@ class AIRobotApplication:
             await self.fs_handler.stop()
             await self.outbound_manager.stop()
             await self.webui_app.stop()
+            await mysql_client.disconnect()
             logger.info("AI机器人应用已关闭")
         except Exception as e:
             logger.error(f"应用关闭异常: {e}")
@@ -155,9 +208,10 @@ class AIRobotApplication:
             # 重新初始化
             self.fs_handler = FreeSwitchHandler()
             self.health_checker = HealthChecker()
-            self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
+            self.call_tester = CallTester()
             self.outbound_manager = OutboundManager(self.fs_handler)
             self.scenario_manager = ScenarioManager()
+            self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
             self.webui_app = WebUIApp(self.fs_handler, self.scenario_manager, self.outbound_manager)
 
             # 重新启动

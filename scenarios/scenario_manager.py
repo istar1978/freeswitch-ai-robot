@@ -71,14 +71,50 @@ class ScenarioManager:
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        scenario = ScenarioConfig(**data)
-        self.scenarios[scenario.scenario_id] = scenario
+        # 处理旧格式的场景文件（场景ID作为键）
+        if isinstance(data, dict) and not any(key in data for key in ['scenario_id', 'name']):
+            # 这是旧格式，每个键都是场景ID
+            for scenario_id, scenario_data in data.items():
+                try:
+                    # 转换旧格式到新格式
+                    config_data = {
+                        'scenario_id': scenario_id,
+                        'name': scenario_data.get('name', scenario_id),
+                        'description': scenario_data.get('description', ''),
+                        'entry_points': scenario_data.get('entry_points', [scenario_id]),
+                        'system_prompt': scenario_data.get('prompt', ''),
+                        'welcome_message': scenario_data.get('welcome_message', '您好！'),
+                        'fallback_responses': scenario_data.get('fallback_responses', []),
+                        'max_turns': scenario_data.get('max_turns', 10),
+                        'timeout_seconds': scenario_data.get('max_duration', 300),
+                        'custom_settings': {
+                            'voice': scenario_data.get('voice', 'female'),
+                            'language': scenario_data.get('language', 'zh-CN'),
+                            'interrupt_enabled': scenario_data.get('interrupt_enabled', True)
+                        }
+                    }
 
-        # 建立入口点映射
-        for entry_point in scenario.entry_points:
-            if entry_point in self.entry_point_map:
-                logger.warning(f"入口点 {entry_point} 被多个场景使用")
-            self.entry_point_map[entry_point] = scenario.scenario_id
+                    scenario = ScenarioConfig(**config_data)
+                    self.scenarios[scenario.scenario_id] = scenario
+
+                    # 建立入口点映射
+                    for entry_point in scenario.entry_points:
+                        if entry_point in self.entry_point_map:
+                            logger.warning(f"入口点 {entry_point} 被多个场景使用")
+                        self.entry_point_map[entry_point] = scenario.scenario_id
+
+                except Exception as e:
+                    logger.error(f"加载场景 {scenario_id} 失败: {e}")
+        else:
+            # 新格式的单个场景文件
+            scenario = ScenarioConfig(**data)
+            self.scenarios[scenario.scenario_id] = scenario
+
+            # 建立入口点映射
+            for entry_point in scenario.entry_points:
+                if entry_point in self.entry_point_map:
+                    logger.warning(f"入口点 {entry_point} 被多个场景使用")
+                self.entry_point_map[entry_point] = scenario.scenario_id
 
     def save_scenario(self, scenario: ScenarioConfig):
         """保存场景配置"""
