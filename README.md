@@ -330,22 +330,88 @@ curl -X POST http://localhost:8080/scenarios/support/activate
 
 ## 部署
 
-项目支持完整的Docker容器化部署：
+项目支持完整的Docker容器化部署，包含MySQL数据库和Redis缓存服务：
 
-1. 构建镜像：
+### 快速启动
+
+1. 克隆项目并进入目录：
 ```bash
-docker-compose build
+git clone https://github.com/istar1978/freeswitch-ai-robot.git
+cd freeswitch-ai-robot
 ```
 
-2. 启动服务：
+2. 使用Docker部署脚本启动：
 ```bash
-docker-compose up -d
+chmod +x scripts/docker-deploy.sh
+./scripts/docker-deploy.sh
 ```
 
-3. 查看日志：
+### 手动部署
+
+1. 配置环境变量：
 ```bash
+cp config/.env.example .env
+# 编辑.env文件，根据需要修改配置
+```
+
+2. 构建并启动服务：
+```bash
+docker-compose up -d --build
+```
+
+3. 等待服务启动（首次启动需要初始化数据库，大约需要1-2分钟）
+
+### 服务说明
+
+启动后将运行以下服务：
+
+- **ai-robot**: 主应用服务 (端口8080/8081)
+- **mysql**: MySQL数据库 (端口3306)
+- **redis**: Redis缓存 (端口6379)
+
+### 访问地址
+
+- **Web管理界面**: http://localhost:8081
+- **API接口**: http://localhost:8080
+- **默认管理员账号**: admin / admin123
+
+### 常用命令
+
+```bash
+# 查看服务状态
+docker-compose ps
+
+# 查看所有服务日志
+docker-compose logs -f
+
+# 查看AI机器人日志
 docker-compose logs -f ai-robot
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+
+# 重新构建
+docker-compose up -d --build
 ```
+
+### 数据库初始化
+
+系统会在首次启动时自动初始化数据库，包括：
+- 创建所有必要的表结构
+- 设置数据库索引
+- 插入默认数据（管理员用户、示例场景等）
+
+### 环境变量配置
+
+主要环境变量请参考 `config/.env.example` 文件：
+
+- **MySQL配置**: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD等
+- **Redis配置**: REDIS_HOST, REDIS_PORT等
+- **FreeSWITCH配置**: FS_HOST, FS_PASSWORD等
+- **外部服务**: ASR_WS_URL, LLM_API_URL, TTS_API_URL等
 
 ## 脚本
 

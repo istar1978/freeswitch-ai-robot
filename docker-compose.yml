@@ -9,6 +9,7 @@ services:
       - "8081:8081"  # 暴露WebUI端口
     environment:
       - REDIS_HOST=redis
+      - MYSQL_HOST=mysql
       - API_HOST=0.0.0.0
       - API_PORT=8080
       # 注意：ASR、LLM、TTS和FreeSWITCH服务需要单独配置或使用外部服务
@@ -17,13 +18,51 @@ services:
       - TTS_API_URL=${TTS_API_URL:-http://localhost:8000/tts}
       - FS_HOST=${FS_HOST:-localhost}
       - FS_PASSWORD=${FS_PASSWORD:-ClueCon}
+      # MySQL配置
+      - MYSQL_USER=${MYSQL_USER:-ai-bot}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-aibot123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-ai-bot}
+      - MYSQL_PORT=3306
+      # WebUI配置
+      - WEBUI_ENABLED=true
+      - WEBUI_HOST=0.0.0.0
+      - WEBUI_PORT=8081
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-this-secret-key}
+      # 认证配置
+      - AUTH_ENABLED=true
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - JWT_SECRET=${JWT_SECRET:-jwt-secret-key}
     depends_on:
-      - redis
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
     volumes:
       - ./logs:/var/log/ai-robot  # 挂载日志目录
       - ./scenarios:/app/scenarios  # 挂载场景配置
       - ./contacts:/app/contacts    # 挂载联系人数据
+    networks:
+      - ai-robot-network
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"  # 暴露MySQL端口
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-ai-bot}
+      - MYSQL_USER=${MYSQL_USER:-ai-bot}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-aibot123}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./storage/init_database.sql:/docker-entrypoint-initdb.d/init_database.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
     networks:
       - ai-robot-network
 
@@ -39,6 +78,7 @@ services:
       - ai-robot-network
 
 volumes:
+  mysql_data:
   redis_data:
 
 networks:
