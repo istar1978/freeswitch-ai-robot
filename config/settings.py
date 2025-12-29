@@ -85,7 +85,7 @@ class MySQLConfig:
     host: str = os.getenv("MYSQL_HOST", "localhost")
     port: int = int(os.getenv("MYSQL_PORT", 3306))
     user: str = os.getenv("MYSQL_USER", "ai-bot")
-    password: str = os.getenv("MYSQL_PASSWORD", "aibot123")
+    password: str = os.getenv("MYSQL_PASSWORD", "ai-bot123")
     database: str = os.getenv("MYSQL_DATABASE", "ai-bot")
 
 @dataclass

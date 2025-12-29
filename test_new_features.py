@@ -8,7 +8,7 @@ import json
 import time
 from config.settings import config
 
-API_BASE_URL = f"http://localhost:{config.api_port}"
+API_BASE_URL = f"http://localhost:{config.api.port}"
 
 async def test_basic_call_flow():
     """测试基础呼叫流程"""

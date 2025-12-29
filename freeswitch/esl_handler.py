@@ -188,6 +188,7 @@ class FreeSwitchHandler:
 
             # 设置回调
             manager.on_audio_output = lambda audio: self._send_audio(instance_id, session_id, audio)
+            manager.on_audio_input = lambda audio: asyncio.create_task(manager._handle_audio_input(audio))
             manager.on_state_change = lambda state: self._on_state_change(instance_id, session_id, state)
             manager.on_hangup = lambda: self._on_hangup(instance_id, session_id)
 
@@ -227,6 +228,7 @@ class FreeSwitchHandler:
 
             # 设置回调
             manager.on_audio_output = lambda audio: self._send_audio(instance_id, session_id, audio)
+            manager.on_audio_input = lambda audio: asyncio.create_task(manager._handle_audio_input(audio))
             manager.on_state_change = lambda state: self._on_state_change(instance_id, session_id, state)
             manager.on_hangup = lambda: self._on_hangup(instance_id, session_id)
 

@@ -6,10 +6,10 @@ echo "FreeSWITCH AI Robot 容器启动脚本"
 
 # 等待MySQL就绪
 echo "等待MySQL数据库就绪..."
-while ! mysqladmin ping -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent; do
-    echo "等待MySQL..."
-    sleep 2
-done
+#while ! mysqladmin ping -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent; do
+#    echo "等待MySQL..."
+    sleep 12
+#done
 
 echo "MySQL连接成功"
 

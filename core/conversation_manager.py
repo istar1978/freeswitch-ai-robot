@@ -50,12 +50,25 @@ class ConversationManager:
 
         # 回调函数
         self.on_audio_output: Optional[Callable] = None
+        self.on_audio_input: Optional[Callable] = None
         self.on_state_change: Optional[Callable] = None
         self.on_hangup: Optional[Callable] = None
         
         # 任务
         self._current_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
+        
+        # ASR 音频发送函数
+        self._asr_send_audio: Optional[Callable] = None
+        
+    def _send_audio_to_asr(self, send_audio_func: Callable):
+        """设置ASR音频发送函数"""
+        self._asr_send_audio = send_audio_func
+        
+    async def _handle_audio_input(self, audio_data: bytes):
+        """处理输入音频数据"""
+        if self._asr_send_audio and self.state == ConversationState.ASR_LISTENING:
+            await self._asr_send_audio(audio_data)
         
     async def start(self):
         """开始对话"""

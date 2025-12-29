@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     default-libmysqlclient-dev \
     pkg-config \
-    mysql-client \
+    mariadb-client-compat \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

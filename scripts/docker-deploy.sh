@@ -5,16 +5,16 @@ set -e
 echo "开始部署FreeSWITCH AI机器人..."
 
 # 检查Docker是否安装
-if ! command -v docker &> /dev/null; then
-    echo "错误: Docker未安装"
-    exit 1
-fi
+#if ! command -v docker &> /dev/null; then
+#    echo "错误: Docker未安装"
+#    exit 1
+#fi
 
 # 检查docker-compose是否安装
-if ! command -v docker-compose &> /dev/null; then
-    echo "错误: docker-compose未安装"
-    exit 1
-fi
+#if ! command -v docker-compose &> /dev/null; then
+#    echo "错误: docker-compose未安装"
+#    exit 1
+#fi
 
 # 创建环境文件（如果不存在）
 if [ ! -f .env ]; then

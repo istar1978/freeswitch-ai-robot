@@ -20,7 +20,7 @@ services:
       - FS_PASSWORD=${FS_PASSWORD:-ClueCon}
       # MySQL配置
       - MYSQL_USER=${MYSQL_USER:-ai-bot}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-aibot123}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-ai-bot123}
       - MYSQL_DATABASE=${MYSQL_DATABASE:-ai-bot}
       - MYSQL_PORT=3306
       # WebUI配置
@@ -54,7 +54,7 @@ services:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root123}
       - MYSQL_DATABASE=${MYSQL_DATABASE:-ai-bot}
       - MYSQL_USER=${MYSQL_USER:-ai-bot}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-aibot123}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-ai-bot123}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./storage/init_database.sql:/docker-entrypoint-initdb.d/init_database.sql
