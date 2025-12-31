@@ -105,6 +105,8 @@ class WebUIApp:
         self.app.router.add_post('/api/outbound/campaigns/{campaign_id}/stop', self.api_stop_campaign)
         self.app.router.add_post('/api/outbound/import', self.api_import_contacts)
         self.app.router.add_get('/api/outbound/export/{campaign_id}', self.api_export_results)
+        self.app.router.add_get('/api/outbound/campaigns/{campaign_id}/contacts', self.api_get_campaign_contacts)
+        self.app.router.add_get('/api/outbound/campaigns/{campaign_id}/stats', self.api_get_campaign_stats)
 
         # 监控API
         self.app.router.add_get('/api/monitoring/active-calls', self.api_get_active_calls)
@@ -118,6 +120,24 @@ class WebUIApp:
         # 通话记录API
         self.app.router.add_get('/api/call-records', self.api_get_call_records)
         self.app.router.add_get('/api/call-records/{record_id}', self.api_get_call_record_detail)
+        
+        # Gateway管理API
+        self.app.router.add_get('/api/gateways', self.api_get_gateways)
+        self.app.router.add_post('/api/gateways', self.api_create_gateway)
+        self.app.router.add_put('/api/gateways/{gateway_id}', self.api_update_gateway)
+        self.app.router.add_delete('/api/gateways/{gateway_id}', self.api_delete_gateway)
+        self.app.router.add_post('/api/gateways/sync', self.api_sync_gateways)
+        self.app.router.add_get('/api/gateways/{gateway_id}/status', self.api_get_gateway_status)
+        
+        # Entry Point管理API
+        self.app.router.add_get('/api/entry-points', self.api_get_entry_points)
+        self.app.router.add_post('/api/entry-points', self.api_create_entry_point)
+        self.app.router.add_put('/api/entry-points/{entry_point_id}', self.api_update_entry_point)
+        self.app.router.add_delete('/api/entry-points/{entry_point_id}', self.api_delete_entry_point)
+        
+        # Dialplan管理API
+        self.app.router.add_post('/api/dialplan/sync', self.api_sync_dialplan)
+        self.app.router.add_get('/api/dialplan/preview', self.api_preview_dialplan)
 
     # 页面处理方法
     async def login_page(self, request):
@@ -428,61 +448,310 @@ class WebUIApp:
     # 外呼管理API
     async def api_get_campaigns(self, request):
         """获取外呼活动列表"""
-        # 这里应该实现获取活动列表逻辑
-        return web.json_response({
-            'success': True,
-            'campaigns': []
-        })
+        try:
+            from storage.mysql_client import mysql_client
+            campaigns = await mysql_client.get_outbound_campaigns()
+            campaign_dicts = []
+            for c in campaigns:
+                campaign_dicts.append({
+                    'id': c.id,
+                    'campaign_id': c.campaign_id,
+                    'name': c.name,
+                    'description': c.description,
+                    'gateway_id': c.gateway_id,
+                    'scenario_id': c.scenario_id,
+                    'data_fields': c.data_fields,
+                    'status': c.status,
+                    'total_contacts': c.total_contacts,
+                    'completed_contacts': c.completed_contacts,
+                    'successful_calls': c.successful_calls,
+                    'failed_calls': c.failed_calls,
+                    'max_concurrent_calls': c.max_concurrent_calls,
+                    'call_timeout': c.call_timeout,
+                    'retry_attempts': c.retry_attempts,
+                    'retry_interval': c.retry_interval,
+                    'schedule_start': c.schedule_start.isoformat() if c.schedule_start else None,
+                    'schedule_end': c.schedule_end.isoformat() if c.schedule_end else None,
+                    'created_at': c.created_at.isoformat() if c.created_at else None,
+                    'updated_at': c.updated_at.isoformat() if c.updated_at else None
+                })
+            return web.json_response({'success': True, 'campaigns': campaign_dicts})
+        except Exception as e:
+            logger.error(f"获取外呼活动列表失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_create_campaign(self, request):
         """创建外呼活动"""
-        data = await request.json()
-
-        # 这里应该实现活动创建逻辑
-        return web.json_response({'success': True, 'message': 'Campaign creation not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            data = await request.json()
+            
+            campaign_data = {
+                'campaign_id': data['campaign_id'],
+                'name': data['name'],
+                'description': data.get('description', ''),
+                'gateway_id': data['gateway_id'],
+                'scenario_id': data['scenario_id'],
+                'data_fields': data.get('data_fields', []),
+                'status': data.get('status', 'draft'),
+                'max_concurrent_calls': data.get('max_concurrent_calls', 10),
+                'call_timeout': data.get('call_timeout', 30),
+                'retry_attempts': data.get('retry_attempts', 3),
+                'retry_interval': data.get('retry_interval', 300),
+                'schedule_start': data.get('schedule_start'),
+                'schedule_end': data.get('schedule_end')
+            }
+            
+            campaign = await mysql_client.create_outbound_campaign(campaign_data)
+            return web.json_response({
+                'success': True,
+                'campaign': {
+                    'id': campaign.id,
+                    'campaign_id': campaign.campaign_id,
+                    'name': campaign.name
+                }
+            })
+        except Exception as e:
+            logger.error(f"创建外呼活动失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_update_campaign(self, request):
         """更新外呼活动"""
-        campaign_id = request.match_info['campaign_id']
-        data = await request.json()
-
-        # 这里应该实现活动更新逻辑
-        return web.json_response({'success': True, 'message': 'Campaign update not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            campaign_id = request.match_info['campaign_id']
+            data = await request.json()
+            
+            update_data = {}
+            for field in ['name', 'description', 'gateway_id', 'scenario_id', 'data_fields',
+                         'status', 'max_concurrent_calls', 'call_timeout', 'retry_attempts',
+                         'retry_interval', 'schedule_start', 'schedule_end']:
+                if field in data:
+                    update_data[field] = data[field]
+            
+            campaign = await mysql_client.update_outbound_campaign(campaign_id, update_data)
+            if campaign:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '外呼活动不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"更新外呼活动失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_delete_campaign(self, request):
         """删除外呼活动"""
-        campaign_id = request.match_info['campaign_id']
-
-        # 这里应该实现活动删除逻辑
-        return web.json_response({'success': True, 'message': 'Campaign deletion not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            campaign_id = request.match_info['campaign_id']
+            
+            # 删除活动的所有联系人
+            await mysql_client.delete_outbound_contacts(campaign_id)
+            
+            # 删除活动
+            success = await mysql_client.delete_outbound_campaign(campaign_id)
+            if success:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '外呼活动不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"删除外呼活动失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_start_campaign(self, request):
         """启动外呼活动"""
-        campaign_id = request.match_info['campaign_id']
-
-        # 这里应该实现活动启动逻辑
-        return web.json_response({'success': True, 'message': 'Campaign start not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            campaign_id = request.match_info['campaign_id']
+            
+            # 更新活动状态为活动
+            campaign = await mysql_client.update_outbound_campaign(campaign_id, {'status': 'active'})
+            if not campaign:
+                return web.json_response({'success': False, 'error': '外呼活动不存在'}, status=404)
+            
+            # 启动外呼管理器（如果需要）
+            if self.outbound_manager:
+                # 这里可以添加启动外呼任务的逻辑
+                pass
+            
+            return web.json_response({
+                'success': True,
+                'message': f'外呼活动 {campaign_id} 已启动'
+            })
+        except Exception as e:
+            logger.error(f"启动外呼活动失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_stop_campaign(self, request):
         """停止外呼活动"""
-        campaign_id = request.match_info['campaign_id']
-
-        # 这里应该实现活动停止逻辑
-        return web.json_response({'success': True, 'message': 'Campaign stop not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            campaign_id = request.match_info['campaign_id']
+            
+            # 更新活动状态为暂停
+            campaign = await mysql_client.update_outbound_campaign(campaign_id, {'status': 'paused'})
+            if not campaign:
+                return web.json_response({'success': False, 'error': '外呼活动不存在'}, status=404)
+            
+            return web.json_response({
+                'success': True,
+                'message': f'外呼活动 {campaign_id} 已停止'
+            })
+        except Exception as e:
+            logger.error(f"停止外呼活动失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_import_contacts(self, request):
         """导入联系人"""
-        data = await request.post()
-
-        # 这里应该实现联系人导入逻辑
-        return web.json_response({'success': True, 'message': 'Contact import not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            import csv
+            import io
+            
+            # 获取上传的文件
+            data = await request.post()
+            campaign_id = data.get('campaign_id')
+            file_field = data.get('file')
+            
+            if not campaign_id or not file_field:
+                return web.json_response({
+                    'success': False,
+                    'error': '缺少campaign_id或文件'
+                }, status=400)
+            
+            # 读取CSV文件
+            content = file_field.file.read().decode('utf-8')
+            csv_reader = csv.DictReader(io.StringIO(content))
+            
+            # 导入联系人
+            imported_count = 0
+            for row in csv_reader:
+                phone_number = row.get('phone', '').strip()
+                if not phone_number:
+                    continue
+                
+                contact_data = {
+                    'campaign_id': campaign_id,
+                    'contact_data': row,
+                    'phone_number': phone_number,
+                    'status': 'pending'
+                }
+                
+                await mysql_client.create_outbound_contact(contact_data)
+                imported_count += 1
+            
+            # 更新活动的总联系人数
+            campaign = await mysql_client.get_outbound_campaign(campaign_id)
+            if campaign:
+                await mysql_client.update_outbound_campaign(campaign_id, {
+                    'total_contacts': campaign.total_contacts + imported_count
+                })
+            
+            return web.json_response({
+                'success': True,
+                'message': f'成功导入 {imported_count} 个联系人'
+            })
+        except Exception as e:
+            logger.error(f"导入联系人失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     async def api_export_results(self, request):
         """导出结果"""
-        campaign_id = request.match_info['campaign_id']
-
-        # 这里应该实现结果导出逻辑
-        return web.json_response({'success': True, 'message': 'Result export not implemented yet'})
+        try:
+            from storage.mysql_client import mysql_client
+            import csv
+            import io
+            
+            campaign_id = request.match_info['campaign_id']
+            
+            # 获取活动的所有联系人
+            contacts = await mysql_client.get_outbound_contacts(campaign_id)
+            
+            # 创建 CSV
+            output = io.StringIO()
+            fieldnames = ['phone_number', 'status', 'attempts', 'call_result', 'call_duration', 'notes']
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for contact in contacts:
+                writer.writerow({
+                    'phone_number': contact.phone_number,
+                    'status': contact.status,
+                    'attempts': contact.attempts,
+                    'call_result': contact.call_result or '',
+                    'call_duration': contact.call_duration or 0,
+                    'notes': contact.notes or ''
+                })
+            
+            # 返回CSV文件
+            csv_content = output.getvalue()
+            return web.Response(
+                text=csv_content,
+                content_type='text/csv',
+                headers={
+                    'Content-Disposition': f'attachment; filename="campaign_{campaign_id}_results.csv"'
+                }
+            )
+        except Exception as e:
+            logger.error(f"导出结果失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_get_campaign_contacts(self, request):
+        """获取活动的联系人列表"""
+        try:
+            from storage.mysql_client import mysql_client
+            campaign_id = request.match_info['campaign_id']
+            
+            contacts = await mysql_client.get_outbound_contacts(campaign_id)
+            contact_dicts = []
+            for c in contacts:
+                contact_dicts.append({
+                    'id': c.id,
+                    'phone_number': c.phone_number,
+                    'contact_data': c.contact_data,
+                    'status': c.status,
+                    'attempts': c.attempts,
+                    'last_attempt': c.last_attempt.isoformat() if c.last_attempt else None,
+                    'next_attempt': c.next_attempt.isoformat() if c.next_attempt else None,
+                    'call_result': c.call_result,
+                    'call_duration': c.call_duration,
+                    'notes': c.notes
+                })
+            
+            return web.json_response({'success': True, 'contacts': contact_dicts})
+        except Exception as e:
+            logger.error(f"获取活动联系人失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_get_campaign_stats(self, request):
+        """获取活动统计信息"""
+        try:
+            from storage.mysql_client import mysql_client
+            campaign_id = request.match_info['campaign_id']
+            
+            # 获取活动信息
+            campaign = await mysql_client.get_outbound_campaign(campaign_id)
+            if not campaign:
+                return web.json_response({'success': False, 'error': '活动不存在'}, status=404)
+            
+            # 获取联系人统计
+            contacts = await mysql_client.get_outbound_contacts(campaign_id)
+            
+            stats = {
+                'total_contacts': len(contacts),
+                'pending': sum(1 for c in contacts if c.status == 'pending'),
+                'calling': sum(1 for c in contacts if c.status == 'calling'),
+                'completed': sum(1 for c in contacts if c.status == 'completed'),
+                'failed': sum(1 for c in contacts if c.status == 'failed'),
+                'total_attempts': sum(c.attempts for c in contacts),
+                'avg_attempts': sum(c.attempts for c in contacts) / len(contacts) if contacts else 0,
+                'total_duration': sum(c.call_duration or 0 for c in contacts),
+                'avg_duration': sum(c.call_duration or 0 for c in contacts) / len(contacts) if contacts else 0
+            }
+            
+            return web.json_response({'success': True, 'stats': stats})
+        except Exception as e:
+            logger.error(f"获取活动统计信息失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
 
     # 监控API
     async def api_get_active_calls(self, request):
@@ -886,3 +1155,284 @@ TTS_VOICE={config.tts.voice}
         except Exception as e:
             logger.error(f"获取通话记录详情失败: {e}")
             return web.json_response({'success': False, 'message': str(e)}, status=500)
+    
+    # Gateway管理API
+    async def api_get_gateways(self, request):
+        """获取网关列表"""
+        try:
+            from storage.mysql_client import mysql_client
+            gateways = await mysql_client.get_gateways()
+            gateway_dicts = []
+            for g in gateways:
+                gateway_dicts.append({
+                    'id': g.id,
+                    'gateway_id': g.gateway_id,
+                    'name': g.name,
+                    'description': g.description,
+                    'gateway_type': g.gateway_type,
+                    'profile': g.profile,
+                    'username': g.username,
+                    'realm': g.realm,
+                    'proxy': g.proxy,
+                    'register': g.register,
+                    'retry_seconds': g.retry_seconds,
+                    'caller_id_in_from': g.caller_id_in_from,
+                    'contact_params': g.contact_params,
+                    'max_channels': g.max_channels,
+                    'codecs': g.codecs,
+                    'freeswitch_instances': g.freeswitch_instances,
+                    'is_active': g.is_active,
+                    'created_at': g.created_at.isoformat() if g.created_at else None,
+                    'updated_at': g.updated_at.isoformat() if g.updated_at else None
+                })
+            return web.json_response({'success': True, 'gateways': gateway_dicts})
+        except Exception as e:
+            logger.error(f"获取网关列表失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_create_gateway(self, request):
+        """创建网关"""
+        try:
+            from storage.mysql_client import mysql_client
+            data = await request.json()
+            
+            gateway_data = {
+                'gateway_id': data['gateway_id'],
+                'name': data['name'],
+                'description': data.get('description', ''),
+                'gateway_type': data.get('gateway_type', 'sip'),
+                'profile': data.get('profile', 'external'),
+                'username': data.get('username', ''),
+                'password': data.get('password', ''),
+                'realm': data.get('realm', ''),
+                'proxy': data.get('proxy', ''),
+                'register': data.get('register', False),
+                'retry_seconds': data.get('retry_seconds', 30),
+                'caller_id_in_from': data.get('caller_id_in_from', False),
+                'contact_params': data.get('contact_params', ''),
+                'max_channels': data.get('max_channels', 100),
+                'codecs': data.get('codecs', ['PCMU', 'PCMA', 'G729']),
+                'freeswitch_instances': data.get('freeswitch_instances', []),
+                'is_active': data.get('is_active', True)
+            }
+            
+            gateway = await mysql_client.create_gateway(gateway_data)
+            return web.json_response({
+                'success': True,
+                'gateway': {'id': gateway.id, 'gateway_id': gateway.gateway_id, 'name': gateway.name}
+            })
+        except Exception as e:
+            logger.error(f"创建网关失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_update_gateway(self, request):
+        """更新网关"""
+        try:
+            from storage.mysql_client import mysql_client
+            gateway_id = request.match_info['gateway_id']
+            data = await request.json()
+            
+            update_data = {}
+            for field in ['name', 'description', 'gateway_type', 'profile', 'username', 'password',
+                         'realm', 'proxy', 'register', 'retry_seconds', 'caller_id_in_from',
+                         'contact_params', 'max_channels', 'codecs', 'freeswitch_instances', 'is_active']:
+                if field in data:
+                    update_data[field] = data[field]
+            
+            gateway = await mysql_client.update_gateway(gateway_id, update_data)
+            if gateway:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '网关不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"更新网关失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_delete_gateway(self, request):
+        """删除网关"""
+        try:
+            from storage.mysql_client import mysql_client
+            gateway_id = request.match_info['gateway_id']
+            
+            success = await mysql_client.delete_gateway(gateway_id)
+            if success:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '网关不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"删除网关失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_sync_gateways(self, request):
+        """同步所有网关到FreeSWITCH"""
+        try:
+            from freeswitch.gateway_manager import gateway_manager
+            count = await gateway_manager.sync_gateways_from_database()
+            
+            # 如果配置同步器可用，重新加载XML
+            from freeswitch.config_sync import config_sync
+            if config_sync:
+                await config_sync.reload_xml()
+            
+            return web.json_response({
+                'success': True,
+                'message': f'已同步 {count} 个网关到FreeSWITCH'
+            })
+        except Exception as e:
+            logger.error(f"同步网关失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_get_gateway_status(self, request):
+        """获取网关状态"""
+        try:
+            gateway_id = request.match_info['gateway_id']
+            from freeswitch.config_sync import config_sync
+            
+            if config_sync:
+                status = await config_sync.get_gateway_status(gateway_id)
+                return web.json_response({'success': True, 'status': status})
+            else:
+                return web.json_response({
+                    'success': False,
+                    'error': '配置同步器未初始化'
+                }, status=500)
+        except Exception as e:
+            logger.error(f"获取网关状态失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    # Entry Point管理API
+    async def api_get_entry_points(self, request):
+        """获取入口点列表"""
+        try:
+            from storage.mysql_client import mysql_client
+            entry_points = await mysql_client.get_entry_points()
+            entry_point_dicts = []
+            for ep in entry_points:
+                entry_point_dicts.append({
+                    'id': ep.id,
+                    'entry_point_id': ep.entry_point_id,
+                    'name': ep.name,
+                    'description': ep.description,
+                    'dialplan_pattern': ep.dialplan_pattern,
+                    'scenario_id': ep.scenario_id,
+                    'gateway_id': ep.gateway_id,
+                    'freeswitch_instances': ep.freeswitch_instances,
+                    'priority': ep.priority,
+                    'is_active': ep.is_active,
+                    'created_at': ep.created_at.isoformat() if ep.created_at else None,
+                    'updated_at': ep.updated_at.isoformat() if ep.updated_at else None
+                })
+            return web.json_response({'success': True, 'entry_points': entry_point_dicts})
+        except Exception as e:
+            logger.error(f"获取入口点列表失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_create_entry_point(self, request):
+        """创建入口点"""
+        try:
+            from storage.mysql_client import mysql_client
+            data = await request.json()
+            
+            entry_point_data = {
+                'entry_point_id': data['entry_point_id'],
+                'name': data['name'],
+                'description': data.get('description', ''),
+                'dialplan_pattern': data['dialplan_pattern'],
+                'scenario_id': data['scenario_id'],
+                'gateway_id': data.get('gateway_id', ''),
+                'freeswitch_instances': data.get('freeswitch_instances', []),
+                'priority': data.get('priority', 100),
+                'is_active': data.get('is_active', True)
+            }
+            
+            entry_point = await mysql_client.create_entry_point(entry_point_data)
+            return web.json_response({
+                'success': True,
+                'entry_point': {
+                    'id': entry_point.id,
+                    'entry_point_id': entry_point.entry_point_id,
+                    'name': entry_point.name
+                }
+            })
+        except Exception as e:
+            logger.error(f"创建入口点失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_update_entry_point(self, request):
+        """更新入口点"""
+        try:
+            from storage.mysql_client import mysql_client
+            entry_point_id = request.match_info['entry_point_id']
+            data = await request.json()
+            
+            update_data = {}
+            for field in ['name', 'description', 'dialplan_pattern', 'scenario_id',
+                         'gateway_id', 'freeswitch_instances', 'priority', 'is_active']:
+                if field in data:
+                    update_data[field] = data[field]
+            
+            entry_point = await mysql_client.update_entry_point(entry_point_id, update_data)
+            if entry_point:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '入口点不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"更新入口点失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_delete_entry_point(self, request):
+        """删除入口点"""
+        try:
+            from storage.mysql_client import mysql_client
+            entry_point_id = request.match_info['entry_point_id']
+            
+            success = await mysql_client.delete_entry_point(entry_point_id)
+            if success:
+                return web.json_response({'success': True})
+            else:
+                return web.json_response({'success': False, 'error': '入口点不存在'}, status=404)
+        except Exception as e:
+            logger.error(f"删除入口点失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    # Dialplan管理API
+    async def api_sync_dialplan(self, request):
+        """同步拨号计划到FreeSWITCH"""
+        try:
+            from freeswitch.config_sync import config_sync
+            
+            if config_sync:
+                success = await config_sync.sync_dialplan_config()
+                if success:
+                    return web.json_response({
+                        'success': True,
+                        'message': '拨号计划已成功同步到FreeSWITCH'
+                    })
+                else:
+                    return web.json_response({
+                        'success': False,
+                        'error': '同步拨号计划失败'
+                    }, status=500)
+            else:
+                return web.json_response({
+                    'success': False,
+                    'error': '配置同步器未初始化'
+                }, status=500)
+        except Exception as e:
+            logger.error(f"同步拨号计划失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)
+    
+    async def api_preview_dialplan(self, request):
+        """预览拨号计划XML"""
+        try:
+            from freeswitch.dialplan_generator import DialplanGenerator
+            generator = DialplanGenerator()
+            xml_content = await generator.generate_dialplan_xml()
+            
+            return web.json_response({
+                'success': True,
+                'xml': xml_content
+            })
+        except Exception as e:
+            logger.error(f"预览拨号计划失败: {e}")
+            return web.json_response({'success': False, 'error': str(e)}, status=500)

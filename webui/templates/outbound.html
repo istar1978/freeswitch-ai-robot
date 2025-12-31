@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>外呼管理 - AI机器人管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: #fff;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            color: #333;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #409eff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #66b1ff;
+        }
+        .btn-success {
+            background: #67c23a;
+            color: white;
+        }
+        .btn-danger {
+            background: #f56c6c;
+            color: white;
+        }
+        .btn-warning {
+            background: #e6a23c;
+            color: white;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f5f7fa;
+            font-weight: 600;
+            color: #606266;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .status-draft { background: #e4e7ed; color: #909399; }
+        .status-active { background: #e1f3d8; color: #67c23a; }
+        .status-paused { background: #fdf6ec; color: #e6a23c; }
+        .status-completed { background: #d9ecff; color: #409eff; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            max-width: 600px;
+            margin: 50px auto;
+            border-radius: 8px;
+            padding: 30px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #606266;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .stat-card.green {
+            background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+        }
+        .stat-card.orange {
+            background: linear-gradient(135deg, #e6a23c 0%, #f1c40f 100%);
+        }
+        .stat-card.red {
+            background: linear-gradient(135deg, #f56c6c 0%, #e74c3c 100%);
+        }
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+        .nav {
+            background: white;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            display: flex;
+            gap: 15px;
+        }
+        .nav a {
+            color: #606266;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        .nav a:hover {
+            background: #f5f7fa;
+            color: #409eff;
+        }
+        .nav a.active {
+            background: #409eff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/dashboard">仪表板</a>
+        <a href="/freeswitch">FreeSWITCH</a>
+        <a href="/scenarios">场景管理</a>
+        <a href="/outbound" class="active">外呼管理</a>
+        <a href="/monitoring">监控</a>
+        <a href="/settings">设置</a>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>外呼管理</h1>
+            <button class="btn btn-primary" onclick="showCreateCampaignModal()">
+                创建外呼活动
+            </button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">外呼活动列表</div>
+            <table id="campaignsTable">
+                <thead>
+                    <tr>
+                        <th>活动名称</th>
+                        <th>描述</th>
+                        <th>场景</th>
+                        <th>网关</th>
+                        <th>状态</th>
+                        <th>总联系人</th>
+                        <th>已完成</th>
+                        <th>成功</th>
+                        <th>失败</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="campaignsTableBody">
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: #909399;">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 创建/编辑活动模态框 -->
+    <div id="campaignModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">创建外呼活动</h2>
+            <form id="campaignForm">
+                <div class="form-group">
+                    <label>活动ID</label>
+                    <input type="text" id="campaign_id" name="campaign_id" required>
+                </div>
+                <div class="form-group">
+                    <label>活动名称</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="description" name="description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>关联场景</label>
+                    <select id="scenario_id" name="scenario_id" required>
+                        <option value="">选择场景</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>关联网关</label>
+                    <select id="gateway_id" name="gateway_id" required>
+                        <option value="">选择网关</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>最大并发呼叫数</label>
+                    <input type="number" id="max_concurrent_calls" name="max_concurrent_calls" value="10">
+                </div>
+                <div class="form-group">
+                    <label>呼叫超时时间（秒）</label>
+                    <input type="number" id="call_timeout" name="call_timeout" value="30">
+                </div>
+                <div class="form-group">
+                    <label>重试次数</label>
+                    <input type="number" id="retry_attempts" name="retry_attempts" value="3">
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeCampaignModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 导入联系人模态框 -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <h2>导入联系人</h2>
+            <form id="importForm">
+                <div class="form-group">
+                    <label>选择CSV文件</label>
+                    <input type="file" id="csvFile" accept=".csv" required>
+                </div>
+                <p style="color: #909399; font-size: 12px; margin-bottom: 20px;">
+                    CSV文件应包含 phone 列（必需）及其他自定义字段
+                </p>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeImportModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">导入</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentCampaignId = null;
+        let scenarios = [];
+        let gateways = [];
+
+        // 加载数据
+        async function loadData() {
+            await loadCampaigns();
+            await loadScenarios();
+            await loadGateways();
+        }
+
+        async function loadCampaigns() {
+            try {
+                const response = await fetch('/api/outbound/campaigns');
+                const data = await response.json();
+                if (data.success) {
+                    renderCampaigns(data.campaigns);
+                }
+            } catch (error) {
+                console.error('加载活动失败:', error);
+            }
+        }
+
+        async function loadScenarios() {
+            try {
+                const response = await fetch('/api/scenarios');
+                const data = await response.json();
+                if (data.success) {
+                    scenarios = data.scenarios;
+                    updateScenarioSelect();
+                }
+            } catch (error) {
+                console.error('加载场景失败:', error);
+            }
+        }
+
+        async function loadGateways() {
+            try {
+                const response = await fetch('/api/gateways');
+                const data = await response.json();
+                if (data.success) {
+                    gateways = data.gateways;
+                    updateGatewaySelect();
+                }
+            } catch (error) {
+                console.error('加载网关失败:', error);
+            }
+        }
+
+        function updateScenarioSelect() {
+            const select = document.getElementById('scenario_id');
+            select.innerHTML = '<option value="">选择场景</option>';
+            scenarios.forEach(s => {
+                select.innerHTML += `<option value="${s.scenario_id}">${s.name}</option>`;
+            });
+        }
+
+        function updateGatewaySelect() {
+            const select = document.getElementById('gateway_id');
+            select.innerHTML = '<option value="">选择网关</option>';
+            gateways.forEach(g => {
+                select.innerHTML += `<option value="${g.gateway_id}">${g.name}</option>`;
+            });
+        }
+
+        function renderCampaigns(campaigns) {
+            const tbody = document.getElementById('campaignsTableBody');
+            if (campaigns.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #909399;">暂无数据</td></tr>';
+                return;
+            }
+            tbody.innerHTML = campaigns.map(c => `
+                <tr>
+                    <td>${c.name}</td>
+                    <td>${c.description || '-'}</td>
+                    <td>${c.scenario_id}</td>
+                    <td>${c.gateway_id}</td>
+                    <td><span class="status-badge status-${c.status}">${getStatusText(c.status)}</span></td>
+                    <td>${c.total_contacts}</td>
+                    <td>${c.completed_contacts}</td>
+                    <td>${c.successful_calls}</td>
+                    <td>${c.failed_calls}</td>
+                    <td>
+                        ${c.status !== 'active' ? `<button class="btn btn-success btn-small" onclick="startCampaign('${c.campaign_id}')">启动</button>` : ''}
+                        ${c.status === 'active' ? `<button class="btn btn-warning btn-small" onclick="stopCampaign('${c.campaign_id}')">停止</button>` : ''}
+                        <button class="btn btn-primary btn-small" onclick="showImportModal('${c.campaign_id}')">导入</button>
+                        <button class="btn btn-danger btn-small" onclick="deleteCampaign('${c.campaign_id}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function getStatusText(status) {
+            const statusMap = {
+                'draft': '草稿',
+                'active': '活动中',
+                'paused': '已暂停',
+                'completed': '已完成'
+            };
+            return statusMap[status] || status;
+        }
+
+        function showCreateCampaignModal() {
+            document.getElementById('modalTitle').textContent = '创建外呼活动';
+            document.getElementById('campaignForm').reset();
+            document.getElementById('campaign_id').disabled = false;
+            currentCampaignId = null;
+            document.getElementById('campaignModal').style.display = 'block';
+        }
+
+        function closeCampaignModal() {
+            document.getElementById('campaignModal').style.display = 'none';
+        }
+
+        function showImportModal(campaignId) {
+            currentCampaignId = campaignId;
+            document.getElementById('importForm').reset();
+            document.getElementById('importModal').style.display = 'block';
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').style.display = 'none';
+        }
+
+        document.getElementById('campaignForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            data.max_concurrent_calls = parseInt(data.max_concurrent_calls);
+            data.call_timeout = parseInt(data.call_timeout);
+            data.retry_attempts = parseInt(data.retry_attempts);
+
+            try {
+                const response = await fetch('/api/outbound/campaigns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('创建成功！');
+                    closeCampaignModal();
+                    loadCampaigns();
+                } else {
+                    alert('创建失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('创建失败: ' + error.message);
+            }
+        });
+
+        document.getElementById('importForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('请选择文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('campaign_id', currentCampaignId);
+
+            try {
+                const response = await fetch('/api/outbound/import', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    closeImportModal();
+                    loadCampaigns();
+                } else {
+                    alert('导入失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('导入失败: ' + error.message);
+            }
+        });
+
+        async function startCampaign(campaignId) {
+            if (!confirm('确定要启动此外呼活动吗？')) return;
+            try {
+                const response = await fetch(`/api/outbound/campaigns/${campaignId}/start`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadCampaigns();
+                } else {
+                    alert('启动失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('启动失败: ' + error.message);
+            }
+        }
+
+        async function stopCampaign(campaignId) {
+            if (!confirm('确定要停止此外呼活动吗？')) return;
+            try {
+                const response = await fetch(`/api/outbound/campaigns/${campaignId}/stop`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadCampaigns();
+                } else {
+                    alert('停止失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('停止失败: ' + error.message);
+            }
+        }
+
+        async function deleteCampaign(campaignId) {
+            if (!confirm('确定要删除此外呼活动吗？此操作不可恢复！')) return;
+            try {
+                const response = await fetch(`/api/outbound/campaigns/${campaignId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('删除成功！');
+                    loadCampaigns();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', loadData);
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const campaignModal = document.getElementById('campaignModal');
+            const importModal = document.getElementById('importModal');
+            if (event.target == campaignModal) {
+                closeCampaignModal();
+            }
+            if (event.target == importModal) {
+                closeImportModal();
+            }
+        }
+    </script>
+</body>
+</html>

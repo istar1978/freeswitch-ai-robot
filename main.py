@@ -11,6 +11,7 @@ from storage.redis_client import redis_client
 from storage.mysql_client import mysql_client
 from freeswitch.esl_handler import FreeSwitchHandler
 from freeswitch.dialplan_generator import DialplanGenerator
+from freeswitch.config_sync import init_config_sync
 from core.health_checker import HealthChecker
 from api.server import APIServer
 from tests.call_tester import CallTester
@@ -33,6 +34,7 @@ class AIRobotApplication:
         self.scenario_manager = ScenarioManager()
         self.api_server = APIServer(self.fs_handler, self.call_tester, self.outbound_manager, self.scenario_manager)
         self.webui_app = WebUIApp(self.fs_handler, self.scenario_manager, self.outbound_manager)
+        self.config_sync = None
         self.running = False
         self.restart_count = 0
         self.max_restarts = 5
@@ -65,6 +67,13 @@ class AIRobotApplication:
 
         # 启动FreeSWITCH处理器（非阻塞）
         startup_tasks.append(self._safe_start_service("FreeSWITCH处理器", self.fs_handler.start()))
+        
+        # 初始化配置同步器
+        try:
+            self.config_sync = init_config_sync(self.fs_handler)
+            logger.info("配置同步器初始化成功")
+        except Exception as e:
+            logger.warning(f"配置同步器初始化失败: {e}")
 
         # 启动API服务器
         startup_tasks.append(self._safe_start_service("API服务器", self.api_server.start()))

@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeSWITCH配置管理 - AI机器人系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f7fa;
+        }
+        .nav {
+            background: white;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+        }
+        .nav a {
+            color: #606266;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        .nav a:hover { background: #f5f7fa; color: #409eff; }
+        .nav a.active { background: #409eff; color: white; }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e4e7ed;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: #606266;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        .tab:hover { color: #409eff; }
+        .tab.active {
+            color: #409eff;
+            border-bottom-color: #409eff;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-primary { background: #409eff; color: white; }
+        .btn-primary:hover { background: #66b1ff; }
+        .btn-success { background: #67c23a; color: white; }
+        .btn-danger { background: #f56c6c; color: white; }
+        .btn-small { padding: 6px 12px; font-size: 12px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f5f7fa;
+            font-weight: 600;
+            color: #606266;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            max-width: 600px;
+            margin: 50px auto;
+            border-radius: 8px;
+            padding: 30px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #606266;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .status-active { background: #e1f3d8; color: #67c23a; }
+        .status-inactive { background: #f4f4f5; color: #909399; }
+        .code-preview {
+            background: #f5f7fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/dashboard">仪表板</a>
+        <a href="/freeswitch" class="active">FreeSWITCH</a>
+        <a href="/scenarios">场景管理</a>
+        <a href="/outbound">外呼管理</a>
+        <a href="/monitoring">监控</a>
+        <a href="/settings">设置</a>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>FreeSWITCH配置管理</h1>
+            <p style="color: #909399; margin-top: 10px;">管理SIP网关、拨号计划和入口点配置</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('gateways')">SIP网关</button>
+            <button class="tab" onclick="switchTab('entry-points')">入口点</button>
+            <button class="tab" onclick="switchTab('dialplan')">拨号计划</button>
+            <button class="tab" onclick="switchTab('instances')">FreeSWITCH实例</button>
+        </div>
+
+        <!-- SIP网关管理 -->
+        <div id="gateways-tab" class="tab-content active">
+            <div class="card">
+                <div class="card-title">
+                    <span>SIP网关配置</span>
+                    <div>
+                        <button class="btn btn-success btn-small" onclick="syncGateways()">同步到FreeSWITCH</button>
+                        <button class="btn btn-primary btn-small" onclick="showGatewayModal()">添加网关</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>网关ID</th>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th>用户名</th>
+                            <th>代理</th>
+                            <th>注册</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gatewaysTableBody">
+                        <tr><td colspan="8" style="text-align: center;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 入口点管理 -->
+        <div id="entry-points-tab" class="tab-content">
+            <div class="card">
+                <div class="card-title">
+                    <span>入口点配置</span>
+                    <button class="btn btn-primary btn-small" onclick="showEntryPointModal()">添加入口点</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>入口点ID</th>
+                            <th>名称</th>
+                            <th>拨号规则</th>
+                            <th>关联场景</th>
+                            <th>关联网关</th>
+                            <th>优先级</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="entryPointsTableBody">
+                        <tr><td colspan="8" style="text-align: center;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 拨号计划管理 -->
+        <div id="dialplan-tab" class="tab-content">
+            <div class="card">
+                <div class="card-title">
+                    <span>拨号计划预览</span>
+                    <div>
+                        <button class="btn btn-success btn-small" onclick="syncDialplan()">同步到FreeSWITCH</button>
+                        <button class="btn btn-primary btn-small" onclick="loadDialplanPreview()">刷新预览</button>
+                    </div>
+                </div>
+                <div class="code-preview" id="dialplanPreview">点击"刷新预览"加载拨号计划XML...</div>
+            </div>
+        </div>
+
+        <!-- FreeSWITCH实例管理 -->
+        <div id="instances-tab" class="tab-content">
+            <div class="card">
+                <div class="card-title">
+                    <span>FreeSWITCH实例</span>
+                    <button class="btn btn-primary btn-small" onclick="showInstanceModal()">添加实例</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>实例ID</th>
+                            <th>名称</th>
+                            <th>主机</th>
+                            <th>端口</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="instancesTableBody">
+                        <tr><td colspan="6" style="text-align: center;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gateway模态框 -->
+    <div id="gatewayModal" class="modal">
+        <div class="modal-content">
+            <h2 id="gatewayModalTitle">添加SIP网关</h2>
+            <form id="gatewayForm">
+                <div class="form-group">
+                    <label>网关ID *</label>
+                    <input type="text" id="gateway_id" name="gateway_id" required>
+                </div>
+                <div class="form-group">
+                    <label>名称 *</label>
+                    <input type="text" id="gateway_name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" id="gateway_description" name="description">
+                </div>
+                <div class="form-group">
+                    <label>用户名 *</label>
+                    <input type="text" id="gateway_username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>密码 *</label>
+                    <input type="password" id="gateway_password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label>域 (Realm) *</label>
+                    <input type="text" id="gateway_realm" name="realm" required>
+                </div>
+                <div class="form-group">
+                    <label>代理 (Proxy) *</label>
+                    <input type="text" id="gateway_proxy" name="proxy" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="gateway_register" name="register">
+                        启用注册
+                    </label>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeGatewayModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Entry Point模态框 -->
+    <div id="entryPointModal" class="modal">
+        <div class="modal-content">
+            <h2>添加入口点</h2>
+            <form id="entryPointForm">
+                <div class="form-group">
+                    <label>入口点ID *</label>
+                    <input type="text" id="entry_point_id" name="entry_point_id" required>
+                </div>
+                <div class="form-group">
+                    <label>名称 *</label>
+                    <input type="text" id="entry_point_name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label>拨号规则 (正则表达式) *</label>
+                    <input type="text" id="dialplan_pattern" name="dialplan_pattern" placeholder="^1000$" required>
+                </div>
+                <div class="form-group">
+                    <label>关联场景 *</label>
+                    <select id="entry_scenario_id" name="scenario_id" required>
+                        <option value="">选择场景</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>关联网关</label>
+                    <select id="entry_gateway_id" name="gateway_id">
+                        <option value="">无</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>优先级</label>
+                    <input type="number" id="entry_priority" name="priority" value="100">
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeEntryPointModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let scenarios = [];
+        let gateways = [];
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        async function loadData() {
+            await loadScenarios();
+            await loadGateways();
+            await loadEntryPoints();
+            await loadInstances();
+        }
+
+        async function loadScenarios() {
+            try {
+                const response = await fetch('/api/scenarios');
+                const data = await response.json();
+                if (data.success) {
+                    scenarios = data.scenarios;
+                    updateScenarioSelects();
+                }
+            } catch (error) {
+                console.error('加载场景失败:', error);
+            }
+        }
+
+        async function loadGateways() {
+            try {
+                const response = await fetch('/api/gateways');
+                const data = await response.json();
+                if (data.success) {
+                    gateways = data.gateways;
+                    renderGateways(data.gateways);
+                    updateGatewaySelects();
+                }
+            } catch (error) {
+                console.error('加载网关失败:', error);
+            }
+        }
+
+        async function loadEntryPoints() {
+            try {
+                const response = await fetch('/api/entry-points');
+                const data = await response.json();
+                if (data.success) {
+                    renderEntryPoints(data.entry_points);
+                }
+            } catch (error) {
+                console.error('加载入口点失败:', error);
+            }
+        }
+
+        async function loadInstances() {
+            try {
+                const response = await fetch('/api/freeswitch/configs');
+                const data = await response.json();
+                if (data.success) {
+                    renderInstances(data.configs);
+                }
+            } catch (error) {
+                console.error('加载实例失败:', error);
+            }
+        }
+
+        function updateScenarioSelects() {
+            const select = document.getElementById('entry_scenario_id');
+            select.innerHTML = '<option value="">选择场景</option>';
+            scenarios.forEach(s => {
+                select.innerHTML += `<option value="${s.scenario_id}">${s.name}</option>`;
+            });
+        }
+
+        function updateGatewaySelects() {
+            const select = document.getElementById('entry_gateway_id');
+            select.innerHTML = '<option value="">无</option>';
+            gateways.forEach(g => {
+                select.innerHTML += `<option value="${g.gateway_id}">${g.name}</option>`;
+            });
+        }
+
+        function renderGateways(gateways) {
+            const tbody = document.getElementById('gatewaysTableBody');
+            if (gateways.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #909399;">暂无数据</td></tr>';
+                return;
+            }
+            tbody.innerHTML = gateways.map(g => `
+                <tr>
+                    <td>${g.gateway_id}</td>
+                    <td>${g.name}</td>
+                    <td>${g.gateway_type}</td>
+                    <td>${g.username}</td>
+                    <td>${g.proxy}</td>
+                    <td>${g.register ? '是' : '否'}</td>
+                    <td><span class="status-badge status-${g.is_active ? 'active' : 'inactive'}">${g.is_active ? '激活' : '停用'}</span></td>
+                    <td>
+                        <button class="btn btn-primary btn-small" onclick="editGateway('${g.gateway_id}')">编辑</button>
+                        <button class="btn btn-danger btn-small" onclick="deleteGateway('${g.gateway_id}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderEntryPoints(entryPoints) {
+            const tbody = document.getElementById('entryPointsTableBody');
+            if (entryPoints.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #909399;">暂无数据</td></tr>';
+                return;
+            }
+            tbody.innerHTML = entryPoints.map(ep => `
+                <tr>
+                    <td>${ep.entry_point_id}</td>
+                    <td>${ep.name}</td>
+                    <td>${ep.dialplan_pattern}</td>
+                    <td>${ep.scenario_id}</td>
+                    <td>${ep.gateway_id || '-'}</td>
+                    <td>${ep.priority}</td>
+                    <td><span class="status-badge status-${ep.is_active ? 'active' : 'inactive'}">${ep.is_active ? '激活' : '停用'}</span></td>
+                    <td>
+                        <button class="btn btn-primary btn-small" onclick="editEntryPoint('${ep.entry_point_id}')">编辑</button>
+                        <button class="btn btn-danger btn-small" onclick="deleteEntryPoint('${ep.entry_point_id}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderInstances(instances) {
+            const tbody = document.getElementById('instancesTableBody');
+            if (instances.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">暂无数据</td></tr>';
+                return;
+            }
+            tbody.innerHTML = instances.map(i => `
+                <tr>
+                    <td>${i.instance_id}</td>
+                    <td>${i.name}</td>
+                    <td>${i.host}</td>
+                    <td>${i.port}</td>
+                    <td><span class="status-badge status-${i.is_active ? 'active' : 'inactive'}">${i.is_active ? '在线' : '离线'}</span></td>
+                    <td>
+                        <button class="btn btn-danger btn-small" onclick="deleteInstance('${i.instance_id}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Gateway相关函数
+        function showGatewayModal() {
+            document.getElementById('gatewayForm').reset();
+            document.getElementById('gateway_id').disabled = false;
+            document.getElementById('gatewayModalTitle').textContent = '添加SIP网关';
+            document.getElementById('gatewayModal').style.display = 'block';
+        }
+
+        function closeGatewayModal() {
+            document.getElementById('gatewayModal').style.display = 'none';
+        }
+
+        document.getElementById('gatewayForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            data.register = document.getElementById('gateway_register').checked;
+
+            try {
+                const response = await fetch('/api/gateways', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('创建成功！');
+                    closeGatewayModal();
+                    loadGateways();
+                } else {
+                    alert('创建失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('创建失败: ' + error.message);
+            }
+        });
+
+        async function deleteGateway(gatewayId) {
+            if (!confirm('确定要删除此网关吗？')) return;
+            try {
+                const response = await fetch(`/api/gateways/${gatewayId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    alert('删除成功！');
+                    loadGateways();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        async function syncGateways() {
+            try {
+                const response = await fetch('/api/gateways/sync', { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                } else {
+                    alert('同步失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('同步失败: ' + error.message);
+            }
+        }
+
+        // Entry Point相关函数
+        function showEntryPointModal() {
+            document.getElementById('entryPointForm').reset();
+            document.getElementById('entryPointModal').style.display = 'block';
+        }
+
+        function closeEntryPointModal() {
+            document.getElementById('entryPointModal').style.display = 'none';
+        }
+
+        document.getElementById('entryPointForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            data.priority = parseInt(data.priority);
+
+            try {
+                const response = await fetch('/api/entry-points', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('创建成功！');
+                    closeEntryPointModal();
+                    loadEntryPoints();
+                } else {
+                    alert('创建失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('创建失败: ' + error.message);
+            }
+        });
+
+        async function deleteEntryPoint(entryPointId) {
+            if (!confirm('确定要删除此入口点吗？')) return;
+            try {
+                const response = await fetch(`/api/entry-points/${entryPointId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    alert('删除成功！');
+                    loadEntryPoints();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        // Dialplan相关函数
+        async function loadDialplanPreview() {
+            try {
+                const response = await fetch('/api/dialplan/preview');
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('dialplanPreview').textContent = result.xml;
+                } else {
+                    alert('加载预览失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('加载预览失败: ' + error.message);
+            }
+        }
+
+        async function syncDialplan() {
+            try {
+                const response = await fetch('/api/dialplan/sync', { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                } else {
+                    alert('同步失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('同步失败: ' + error.message);
+            }
+        }
+
+        async function deleteInstance(instanceId) {
+            if (!confirm('确定要删除此实例吗？')) return;
+            try {
+                const response = await fetch(`/api/freeswitch/configs/${instanceId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    alert('删除成功！');
+                    loadInstances();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', loadData);
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const gatewayModal = document.getElementById('gatewayModal');
+            const entryPointModal = document.getElementById('entryPointModal');
+            if (event.target == gatewayModal) closeGatewayModal();
+            if (event.target == entryPointModal) closeEntryPointModal();
+        }
+    </script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 # freeswitch/dialplan_generator.py
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from config.settings import config
 from utils.logger import setup_logger
+from freeswitch.config_manager import fs_config_manager
 
 logger = setup_logger(__name__)
 
@@ -10,7 +11,7 @@ class DialplanGenerator:
     """FreeSWITCH拨号计划生成器"""
 
     def __init__(self):
-        self.dialplan_dir = "/usr/local/freeswitch/conf/dialplan"
+        self.dialplan_dir = fs_config_manager.get_dialplan_path()
         self.context_name = config.freeswitch.dialplan_context
 
     async def generate_dialplan_xml(self) -> str:
@@ -177,57 +178,110 @@ freeswitch.consoleLog("INFO", "AI Robot call ended: " .. session_id)
 '''
         return template
 
-    def save_dialplan(self, xml_content: str, lua_content: str):
+    def save_dialplan(self, xml_content: str, lua_content: str = None):
         """保存拨号计划文件"""
         try:
             # 确保目录存在
-            os.makedirs(self.dialplan_dir, exist_ok=True)
+            fs_config_manager.ensure_directories()
 
             # 保存XML文件
-            xml_path = os.path.join(self.dialplan_dir, "ai_robot_dialplan.xml")
-            with open(xml_path, 'w', encoding='utf-8') as f:
-                f.write(xml_content)
-            logger.info(f"拨号计划XML已保存: {xml_path}")
+            xml_path = self.dialplan_dir / "ai_robot_dialplan.xml"
+            fs_config_manager.write_config_file(xml_path, xml_content)
 
             # 保存Lua脚本
-            lua_path = os.path.join(self.dialplan_dir, "ai_robot_handler.lua")
-            with open(lua_path, 'w', encoding='utf-8') as f:
-                f.write(lua_content)
-            logger.info(f"Lua脚本已保存: {lua_path}")
+            if lua_content:
+                lua_path = self.dialplan_dir / "ai_robot_handler.lua"
+                with open(lua_path, 'w', encoding='utf-8') as f:
+                    f.write(lua_content)
+                logger.info(f"Lua脚本已保存: {lua_path}")
 
         except Exception as e:
             logger.error(f"保存拨号计划文件失败: {e}")
             raise
-        return template
 
     async def save_dialplan_files(self, output_dir: str = None):
         """保存拨号计划文件"""
+        from pathlib import Path
         if output_dir is None:
             output_dir = self.dialplan_dir
+        else:
+            output_dir = Path(output_dir)
 
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         # 保存XML拨号计划
-        xml_file = os.path.join(output_dir, f"{self.context_name}.xml")
-        with open(xml_file, 'w', encoding='utf-8') as f:
-            f.write(await self.generate_dialplan_xml())
+        xml_file = output_dir / f"{self.context_name}.xml"
+        xml_content = await self.generate_dialplan_xml()
+        fs_config_manager.write_config_file(xml_file, xml_content)
 
         # 保存Lua脚本
-        lua_file = os.path.join(output_dir, "ai_robot_handler.lua")
+        lua_file = output_dir / "ai_robot_handler.lua"
         with open(lua_file, 'w', encoding='utf-8') as f:
             f.write(self.generate_lua_script())
 
         logger.info(f"拨号计划文件已保存到: {output_dir}")
-        return xml_file, lua_file
+        return str(xml_file), str(lua_file)
 
-    def validate_dialplan(self) -> bool:
+    async def validate_dialplan(self) -> bool:
         """验证拨号计划配置"""
         try:
-            import xml.etree.ElementTree as ET
-            xml_content = self.generate_dialplan_xml()
-            ET.fromstring(xml_content)
-            logger.info("拨号计划XML格式验证通过")
-            return True
+            xml_content = await self.generate_dialplan_xml()
+            return fs_config_manager.validate_xml(xml_content)
         except Exception as e:
             logger.error(f"拨号计划XML格式错误: {e}")
             return False
+    
+    async def sync_dialplan_from_database(self) -> bool:
+        """从数据库同步拨号计划到FreeSWITCH"""
+        try:
+            # 生成拨号计划XML
+            xml_content = await self.generate_dialplan_xml()
+            
+            # 验证XML格式
+            if not fs_config_manager.validate_xml(xml_content):
+                logger.error("拨号计划XML格式验证失败")
+                return False
+            
+            # 保存配置文件
+            xml_path = self.dialplan_dir / f"{self.context_name}.xml"
+            
+            # 备份旧配置
+            if xml_path.exists():
+                fs_config_manager.backup_config_file(xml_path)
+            
+            # 写入新配置
+            success = fs_config_manager.write_config_file(xml_path, xml_content)
+            
+            if success:
+                logger.info(f"拨号计划已同步到FreeSWITCH: {xml_path}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"同步拨号计划失败: {e}")
+            return False
+    
+    async def generate_entry_point_dialplan(self, entry_point_data: Dict) -> str:
+        """为单个入口点生成拨号计划扩展"""
+        entry_point_id = entry_point_data.get('entry_point_id', 'entry')
+        pattern = entry_point_data.get('dialplan_pattern', '^default$')
+        scenario_id = entry_point_data.get('scenario_id', 'default')
+        gateway_id = entry_point_data.get('gateway_id', '')
+        
+        extension = f'''      <extension name="{entry_point_id}">
+        <condition field="destination_number" expression="{pattern}">
+          <action application="set" data="ai_scenario_id={scenario_id}"/>'''
+        
+        if gateway_id:
+            extension += f'''
+          <action application="set" data="ai_gateway_id={gateway_id}"/>'''
+        
+        extension += '''
+          <action application="set" data="hangup_after_bridge=true"/>
+          <action application="set" data="continue_on_fail=true"/>
+          <action application="set" data="execute_on_answer=ai_robot_start"/>
+          <action application="lua" data="ai_robot_handler.lua"/>
+        </condition>
+      </extension>
+'''
+        return extension

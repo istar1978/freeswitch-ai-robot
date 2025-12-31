@@ -1,0 +1,764 @@
+# Kubernetes部署配置文件 - FreeSWITCH AI Robot
+# 包含所有必需的组件：MySQL, Redis, AI Robot应用
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-robot
+
+---
+# ConfigMap - 应用配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-robot-config
+  namespace: ai-robot
+data:
+  # Redis配置
+  REDIS_ENABLED: "true"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  # MySQL配置
+  MYSQL_ENABLED: "true"
+  MYSQL_HOST: "mysql-service"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "aibot"
+  # API配置
+  API_ENABLED: "true"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8080"
+  # WebUI配置
+  WEBUI_ENABLED: "true"
+  WEBUI_HOST: "0.0.0.0"
+  WEBUI_PORT: "8081"
+  # 认证配置
+  AUTH_ENABLED: "true"
+  AUTH_ADMIN_USERNAME: "admin"
+  AUTH_JWT_EXPIRATION: "86400"
+  # FreeSWITCH配置
+  FREESWITCH_ENABLED: "false"
+  FREESWITCH_PORT: "8021"
+  FREESWITCH_AUDIO_SAMPLE_RATE: "8000"
+  FREESWITCH_DIALPLAN_CONTEXT: "public"
+  # ASR配置
+  ASR_ENABLED: "true"
+  ASR_PROVIDER: "funasr"
+  ASR_WS_URL: "ws://funasr-service:10095"
+  ASR_SAMPLE_RATE: "16000"
+  # LLM配置
+  LLM_ENABLED: "false"
+  LLM_PROVIDER: "openai"
+  LLM_MODEL: "gpt-3.5-turbo"
+  LLM_TEMPERATURE: "0.7"
+  LLM_MAX_TOKENS: "2000"
+  # TTS配置
+  TTS_ENABLED: "true"
+  TTS_PROVIDER: "cosyvoice"
+  TTS_API_URL: "http://cosyvoice-service:50000/tts"
+  TTS_VOICE: "zh-CN-XiaoxiaoNeural"
+  # 日志配置
+  LOG_LEVEL: "INFO"
+  LOG_FILE: "/var/log/ai-robot/app.log"
+
+---
+# Secret - 敏感信息
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-robot-secret
+  namespace: ai-robot
+type: Opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: "root123"
+  MYSQL_USER: "aibot"
+  MYSQL_PASSWORD: "aibot123"
+  REDIS_PASSWORD: ""
+  AUTH_ADMIN_PASSWORD: "admin123"
+  AUTH_JWT_SECRET: "change-this-jwt-secret-key-in-production"
+  FREESWITCH_PASSWORD: "ClueCon"
+
+---
+# PersistentVolumeClaim - MySQL数据持久化
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: ai-robot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim - Redis数据持久化
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: ai-robot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim - 应用日志
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-robot-logs-pvc
+  namespace: ai-robot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim - 应用数据
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-robot-data-pvc
+  namespace: ai-robot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim - FunASR模型
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: funasr-models-pvc
+  namespace: ai-robot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim - CosyVoice模型
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cosyvoice-models-pvc
+  namespace: ai-robot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+  storageClassName: standard
+
+---
+# MySQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: ai-robot
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+          name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: ai-robot-config
+              key: MYSQL_DATABASE
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: MYSQL_PASSWORD
+        - name: TZ
+          value: "Asia/Shanghai"
+        args:
+          - --character-set-server=utf8mb4
+          - --collation-server=utf8mb4_unicode_ci
+          - --default-authentication-plugin=mysql_native_password
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
+        - name: init-sql
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: mysql-storage
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+      - name: init-sql
+        configMap:
+          name: mysql-init-sql
+
+---
+# MySQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: ai-robot
+  labels:
+    app: mysql
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+    name: mysql
+  selector:
+    app: mysql
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: ai-robot
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        command:
+          - redis-server
+          - --appendonly
+          - "yes"
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: redis-pvc
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: ai-robot
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: redis
+
+---
+# FunASR Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: funasr
+  namespace: ai-robot
+  labels:
+    app: funasr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: funasr
+  template:
+    metadata:
+      labels:
+        app: funasr
+    spec:
+      containers:
+      - name: funasr
+        image: registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.10
+        ports:
+        - containerPort: 10095
+          name: websocket
+        env:
+        - name: WORKSPACE
+          value: "/workspace/models"
+        command:
+          - bash
+          - -c
+          - |
+            if [ ! -d /workspace/models/damo ]; then
+              echo 'Downloading FunASR models...'
+              mkdir -p /workspace/models
+            fi
+            /workspace/FunASR/runtime/onnxruntime/bin/funasr-wss-server-2pass \
+              --download-model-dir /workspace/models \
+              --model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx \
+              --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx \
+              --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx \
+              --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx \
+              --itn-dir thuduj12/fst_itn_zh \
+              --port 10095
+        volumeMounts:
+        - name: models
+          mountPath: /workspace/models
+        livenessProbe:
+          tcpSocket:
+            port: 10095
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 10095
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: funasr-models-pvc
+
+---
+# FunASR Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: funasr-service
+  namespace: ai-robot
+  labels:
+    app: funasr
+spec:
+  type: ClusterIP
+  ports:
+  - port: 10095
+    targetPort: 10095
+    protocol: TCP
+    name: websocket
+  selector:
+    app: funasr
+
+---
+# CosyVoice Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosyvoice
+  namespace: ai-robot
+  labels:
+    app: cosyvoice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cosyvoice
+  template:
+    metadata:
+      labels:
+        app: cosyvoice
+    spec:
+      containers:
+      - name: cosyvoice
+        image: registry.cn-hangzhou.aliyuncs.com/modelscope-repo/cosyvoice:v1.0
+        ports:
+        - containerPort: 50000
+          name: http
+        env:
+        - name: MODEL_DIR
+          value: "/workspace/models"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "-1"  # CPU模式，如有GPU设置为0
+        command:
+          - bash
+          - -c
+          - |
+            if [ ! -d /workspace/models/CosyVoice-300M ]; then
+              echo 'Downloading CosyVoice models...'
+              mkdir -p /workspace/models
+            fi
+            python3 /workspace/CosyVoice/cosyvoice/bin/cosyvoice_server.py \
+              --port 50000 \
+              --model_dir /workspace/models/CosyVoice-300M
+        volumeMounts:
+        - name: models
+          mountPath: /workspace/models
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 50000
+          initialDelaySeconds: 180
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 50000
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: cosyvoice-models-pvc
+
+---
+# CosyVoice Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cosyvoice-service
+  namespace: ai-robot
+  labels:
+    app: cosyvoice
+spec:
+  type: ClusterIP
+  ports:
+  - port: 50000
+    targetPort: 50000
+    protocol: TCP
+    name: http
+  selector:
+    app: cosyvoice
+
+---
+# AI Robot Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-robot
+  namespace: ai-robot
+  labels:
+    app: ai-robot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-robot
+  template:
+    metadata:
+      labels:
+        app: ai-robot
+    spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox:1.35
+        command:
+          - sh
+          - -c
+          - |
+            until nc -z mysql-service 3306; do
+              echo "Waiting for MySQL..."
+              sleep 2
+            done
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+          - sh
+          - -c
+          - |
+            until nc -z redis-service 6379; do
+              echo "Waiting for Redis..."
+              sleep 2
+            done
+      containers:
+      - name: ai-robot
+        image: ai-robot:latest  # 替换为你的镜像地址
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: api
+          protocol: TCP
+        - containerPort: 8081
+          name: webui
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: ai-robot-config
+        env:
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: MYSQL_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: REDIS_PASSWORD
+        - name: AUTH_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: AUTH_ADMIN_PASSWORD
+        - name: AUTH_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: AUTH_JWT_SECRET
+        - name: FREESWITCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-robot-secret
+              key: FREESWITCH_PASSWORD
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/ai-robot
+        - name: data
+          mountPath: /app/data
+        - name: scenarios
+          mountPath: /app/scenarios
+        - name: contacts
+          mountPath: /app/contacts
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-robot-logs-pvc
+      - name: data
+        persistentVolumeClaim:
+          claimName: ai-robot-data-pvc
+      - name: scenarios
+        emptyDir: {}
+      - name: contacts
+        emptyDir: {}
+
+---
+# AI Robot Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-robot-service
+  namespace: ai-robot
+  labels:
+    app: ai-robot
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: api
+  - port: 8081
+    targetPort: 8081
+    protocol: TCP
+    name: webui
+  selector:
+    app: ai-robot
+
+---
+# Ingress - 外部访问
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-robot-ingress
+  namespace: ai-robot
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ai-robot.example.com  # 替换为你的域名
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-robot-service
+            port:
+              number: 8081
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-robot-service
+            port:
+              number: 8080
+
+---
+# HorizontalPodAutoscaler - 自动扩缩容
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-robot-hpa
+  namespace: ai-robot
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-robot
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# ConfigMap - MySQL初始化SQL
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-sql
+  namespace: ai-robot
+data:
+  init.sql: |
+    -- 此文件内容应该与 storage/init_database.sql 一致
+    -- 由于篇幅限制，这里仅作示例
+    -- 实际部署时需要将完整的init_database.sql内容放在这里
+    CREATE DATABASE IF NOT EXISTS aibot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    USE aibot;
