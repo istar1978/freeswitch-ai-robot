@@ -193,28 +193,82 @@ class OutboundManager:
                 await asyncio.sleep(1)
 
     async def _execute_call(self, task: OutboundTask):
-        """执行外呼"""
+        """执行外呼 - 使用真实ESL接口"""
         logger.info(f"开始外呼: {task.phone_number} ({task.customer_name})")
 
         try:
-            # 这里应该集成实际的FreeSWITCH外呼逻辑
-            # 简化实现：模拟外呼过程
-
             task.status = OutboundStatus.CALLING
             task.last_attempt_time = datetime.now()
 
-            # 模拟呼叫过程
-            await asyncio.sleep(2)  # 模拟拨号时间
+            # 使用FreeSWITCH Handler发起外呼
+            if not self.fs_handler:
+                logger.error("未FreeSWITCH Handler，无法发起外呼")
+                task.record_attempt(False, error="FreeSWITCH Handler not available")
+                return
 
-            # 模拟接通
-            if task.attempt_count == 0:  # 第一次尝试成功
-                await self._handle_connected_call(task)
+            # 从任务数据中获取配置
+            gateway = task.customer_data.get('gateway')
+            scenario_id = task.customer_data.get('scenario_id', 'default')
+            caller_id = task.customer_data.get('caller_id')
+            instance_id = task.customer_data.get('instance_id', 'default')
+
+            # 发起外呼
+            session_id = await self.fs_handler.handle_outbound_call(
+                target_number=task.phone_number,
+                instance_id=instance_id,
+                scenario_id=scenario_id,
+                gateway=gateway,
+                caller_id=caller_id,
+                variables={
+                    'customer_name': task.customer_name,
+                    'task_id': task.task_id
+                }
+            )
+
+            if session_id:
+                # 外呼成功
+                logger.info(f"外呼成功: {task.phone_number}, 会话ID: {session_id}")
+                
+                # 保存到active_calls
+                self.active_calls[session_id] = {
+                    'task': task,
+                    'start_time': datetime.now()
+                }
+                
+                # 等待对话结束（或者设置一个最大时间）
+                max_duration = task.customer_data.get('max_duration', 300)  # 默认300秒
+                await asyncio.sleep(max_duration)
+                
+                # 检查会话是否还在
+                session_info = self.fs_handler.get_session_info(session_id)
+                if session_info:
+                    duration = session_info.get('duration', 0)
+                else:
+                    duration = max_duration
+                    
+                # 记录成功结果
+                task.record_attempt(True, {
+                    "session_id": session_id,
+                    "duration": duration,
+                    "conversation_completed": True
+                })
+                task.status = OutboundStatus.COMPLETED
+                task.completed_time = datetime.now()
+                
+                # 清理
+                if session_id in self.active_calls:
+                    del self.active_calls[session_id]
             else:
-                # 后续尝试可能失败
-                task.record_attempt(False, error="Simulated call failure")
+                # 外呼失败
+                logger.error(f"外呼失败: {task.phone_number}")
+                task.record_attempt(False, error="Outbound call failed")
 
+        except asyncio.CancelledError:
+            logger.warning(f"外呼被取消: {task.phone_number}")
+            task.record_attempt(False, error="Call cancelled")
+            raise
         except Exception as e:
-            logger.error(f"外呼执行异常: {e}")
+            logger.error(f"外呼执行异常: {e}", exc_info=True)
             task.record_attempt(False, error=str(e))
 
     async def _handle_connected_call(self, task: OutboundTask):

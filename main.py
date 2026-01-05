@@ -57,7 +57,21 @@ class AIRobotApplication:
             mysql_connected = False
 
         # 连接Redis（非阻塞）
-        startup_tasks.append(self._safe_start_service("Redis", redis_client.connect()))
+        try:
+            await redis_client.connect()
+            logger.info("Redis连接成功")
+            redis_connected = True
+        except Exception as e:
+            logger.error(f"Redis连接失败: {e}")
+            redis_connected = False
+        
+        # 加载配置到Redis（如果两者都连接成功）
+        if mysql_connected and redis_connected:
+            try:
+                await mysql_client.load_all_configs_to_redis()
+                logger.info("配置已加载到Redis")
+            except Exception as e:
+                logger.warning(f"加载配置到Redis失败: {e}")
 
         # 生成拨号计划文件（非阻塞）
         startup_tasks.append(self._safe_start_service("拨号计划生成", self._generate_dialplan_files()))
@@ -143,6 +157,7 @@ class AIRobotApplication:
             await self.fs_handler.stop()
             await self.outbound_manager.stop()
             await self.webui_app.stop()
+            await redis_client.disconnect()
             await mysql_client.disconnect()
             logger.info("AI机器人应用已关闭")
         except Exception as e:

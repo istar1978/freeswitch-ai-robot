@@ -325,46 +325,44 @@ class ConversationManager:
             await self._play_fallback()
             
     async def _create_call_record(self):
-        """创建通话记录"""
+        """创建通话记录 - 使用Redis缓存"""
         try:
-            session = await mysql_client.get_session()
-            async with session:
-                call_record = CallRecord(
-                    session_id=self.session_id,
-                    caller_number=self.caller_number,
-                    start_time=self.call_start_time,
-                    conversation_log=json.dumps(self.conversation_history, ensure_ascii=False)
-                )
-                session.add(call_record)
-                await session.commit()
-                self.call_record_id = call_record.id
-                logger.info(f"创建通话记录: {self.call_record_id}")
+            from storage.redis_client import redis_client
+            
+            call_data = {
+                'session_id': self.session_id,
+                'caller_number': self.caller_number,
+                'start_time': self.call_start_time.isoformat() if self.call_start_time else None,
+                'conversation_log': json.dumps(self.conversation_history, ensure_ascii=False),
+                'status': 'active'
+            }
+            
+            # 优先写入Redis
+            await redis_client.create_call_record(self.session_id, call_data)
+            logger.info(f"通话记录已缓存: {self.session_id}")
+            
         except Exception as e:
             logger.error(f"创建通话记录失败: {e}")
 
     async def _update_call_record(self, status: str):
-        """更新通话记录"""
+        """更新通话记录 - 使用Redis缓存"""
         try:
-            if not self.call_record_id:
-                return
-                
+            from storage.redis_client import redis_client
+            
             end_time = datetime.utcnow()
             duration = int((end_time - self.call_start_time).total_seconds())
             
-            session = await mysql_client.get_session()
-            async with session:
-                result = await session.execute(
-                    select(CallRecord).where(CallRecord.id == self.call_record_id)
-                )
-                call_record = result.scalar_one_or_none()
-                
-                if call_record:
-                    call_record.end_time = end_time
-                    call_record.duration = duration
-                    call_record.conversation_log = json.dumps(self.conversation_history, ensure_ascii=False)
-                    call_record.status = status
-                    await session.commit()
-                    logger.info(f"更新通话记录: {self.call_record_id}, 状态: {status}")
+            update_data = {
+                'end_time': end_time.isoformat(),
+                'duration': duration,
+                'conversation_log': json.dumps(self.conversation_history, ensure_ascii=False),
+                'status': status
+            }
+            
+            # 优先更新Redis，异步同步到MySQL
+            await redis_client.update_call_record(self.session_id, update_data)
+            logger.info(f"通话记录已更新: {self.session_id}, 状态: {status}")
+            
         except Exception as e:
             logger.error(f"更新通话记录失败: {e}")
         

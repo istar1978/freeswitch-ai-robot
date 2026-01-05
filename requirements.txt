@@ -18,3 +18,6 @@ requests==2.31.0
 aiomysql==0.2.0
 numpy==1.26.2
 scipy==1.11.4
+# FreeSWITCH ESL
+freeswitchESL==1.0.0
+greenswitch==0.0.11

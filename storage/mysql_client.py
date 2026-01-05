@@ -181,6 +181,162 @@ class MySQLClient:
         """获取数据库会话"""
         return self.session_maker()
 
+    # ========== 配置加载到Redis ==========
+    
+    async def load_all_configs_to_redis(self):
+        """启动时将所有配置加载到Redis"""
+        try:
+            from storage.redis_client import redis_client
+            
+            logger.info("开始加载配置到Redis...")
+            
+            # 清除旧缓存
+            await redis_client.clear_all_configs()
+            
+            # 加载场景配置
+            scenarios = await self.get_scenarios()
+            for scenario in scenarios:
+                config_data = self._scenario_to_dict(scenario)
+                await redis_client.set_config('scenario', scenario.scenario_id, config_data)
+            logger.info(f"已加载 {len(scenarios)} 个场景配置")
+            
+            # 加载FreeSWITCH配置
+            fs_configs = await self.get_freeswitch_configs()
+            for fs_config in fs_configs:
+                config_data = self._freeswitch_config_to_dict(fs_config)
+                await redis_client.set_config('freeswitch', fs_config.instance_id, config_data)
+            logger.info(f"已加载 {len(fs_configs)} 个FreeSWITCH配置")
+            
+            # 加载网关配置
+            gateways = await self.get_gateways()
+            for gateway in gateways:
+                config_data = self._gateway_to_dict(gateway)
+                await redis_client.set_config('gateway', gateway.gateway_id, config_data)
+            logger.info(f"已加载 {len(gateways)} 个网关配置")
+            
+            # 加载入口点配置
+            entry_points = await self.get_entry_points()
+            for entry_point in entry_points:
+                config_data = self._entry_point_to_dict(entry_point)
+                await redis_client.set_config('entry_point', entry_point.entry_point_id, config_data)
+            logger.info(f"已加载 {len(entry_points)} 个入口点配置")
+            
+            # 加载外呼活动配置
+            campaigns = await self.get_outbound_campaigns()
+            for campaign in campaigns:
+                config_data = self._campaign_to_dict(campaign)
+                await redis_client.set_config('campaign', campaign.campaign_id, config_data)
+            logger.info(f"已加载 {len(campaigns)} 个外呼活动配置")
+            
+            logger.info("所有配置已加载到Redis")
+            return True
+            
+        except Exception as e:
+            logger.error(f"加载配置到Redis失败: {e}")
+            return False
+    
+    def _scenario_to_dict(self, scenario) -> dict:
+        """将Scenario对象转换为dict"""
+        return {
+            'id': scenario.id,
+            'scenario_id': scenario.scenario_id,
+            'name': scenario.name,
+            'description': scenario.description,
+            'entry_points': scenario.entry_points,
+            'system_prompt': scenario.system_prompt,
+            'welcome_message': scenario.welcome_message,
+            'fallback_responses': scenario.fallback_responses,
+            'max_turns': scenario.max_turns,
+            'timeout_seconds': scenario.timeout_seconds,
+            'custom_settings': scenario.custom_settings,
+            'is_active': scenario.is_active,
+            'created_at': scenario.created_at.isoformat() if scenario.created_at else None,
+            'updated_at': scenario.updated_at.isoformat() if scenario.updated_at else None
+        }
+    
+    def _freeswitch_config_to_dict(self, config) -> dict:
+        """将FreeSwitchConfig对象转换为dict"""
+        return {
+            'id': config.id,
+            'instance_id': config.instance_id,
+            'name': config.name,
+            'host': config.host,
+            'port': config.port,
+            'password': config.password,
+            'scenario_mapping': config.scenario_mapping,
+            'gateway_ids': config.gateway_ids,
+            'is_active': config.is_active,
+            'created_at': config.created_at.isoformat() if config.created_at else None,
+            'updated_at': config.updated_at.isoformat() if config.updated_at else None
+        }
+    
+    def _gateway_to_dict(self, gateway) -> dict:
+        """将Gateway对象转换为dict"""
+        return {
+            'id': gateway.id,
+            'gateway_id': gateway.gateway_id,
+            'name': gateway.name,
+            'description': gateway.description,
+            'gateway_type': gateway.gateway_type,
+            'profile': gateway.profile,
+            'username': gateway.username,
+            'password': gateway.password,
+            'realm': gateway.realm,
+            'proxy': gateway.proxy,
+            'register': gateway.register,
+            'retry_seconds': gateway.retry_seconds,
+            'caller_id_in_from': gateway.caller_id_in_from,
+            'contact_params': gateway.contact_params,
+            'max_channels': gateway.max_channels,
+            'codecs': gateway.codecs,
+            'freeswitch_instances': gateway.freeswitch_instances,
+            'is_active': gateway.is_active,
+            'created_at': gateway.created_at.isoformat() if gateway.created_at else None,
+            'updated_at': gateway.updated_at.isoformat() if gateway.updated_at else None
+        }
+    
+    def _entry_point_to_dict(self, entry_point) -> dict:
+        """将EntryPoint对象转换为dict"""
+        return {
+            'id': entry_point.id,
+            'entry_point_id': entry_point.entry_point_id,
+            'name': entry_point.name,
+            'description': entry_point.description,
+            'dialplan_pattern': entry_point.dialplan_pattern,
+            'scenario_id': entry_point.scenario_id,
+            'gateway_id': entry_point.gateway_id,
+            'freeswitch_instances': entry_point.freeswitch_instances,
+            'priority': entry_point.priority,
+            'is_active': entry_point.is_active,
+            'created_at': entry_point.created_at.isoformat() if entry_point.created_at else None,
+            'updated_at': entry_point.updated_at.isoformat() if entry_point.updated_at else None
+        }
+    
+    def _campaign_to_dict(self, campaign) -> dict:
+        """将OutboundCampaign对象转换为dict"""
+        return {
+            'id': campaign.id,
+            'campaign_id': campaign.campaign_id,
+            'name': campaign.name,
+            'description': campaign.description,
+            'gateway_id': campaign.gateway_id,
+            'scenario_id': campaign.scenario_id,
+            'data_fields': campaign.data_fields,
+            'status': campaign.status,
+            'total_contacts': campaign.total_contacts,
+            'completed_contacts': campaign.completed_contacts,
+            'successful_calls': campaign.successful_calls,
+            'failed_calls': campaign.failed_calls,
+            'max_concurrent_calls': campaign.max_concurrent_calls,
+            'call_timeout': campaign.call_timeout,
+            'retry_attempts': campaign.retry_attempts,
+            'retry_interval': campaign.retry_interval,
+            'schedule_start': campaign.schedule_start.isoformat() if campaign.schedule_start else None,
+            'schedule_end': campaign.schedule_end.isoformat() if campaign.schedule_end else None,
+            'created_at': campaign.created_at.isoformat() if campaign.created_at else None,
+            'updated_at': campaign.updated_at.isoformat() if campaign.updated_at else None
+        }
+
     # 场景管理方法
     async def create_scenario(self, scenario_data: dict):
         """创建场景"""
@@ -190,10 +346,24 @@ class MySQLClient:
             session.add(scenario)
             await session.commit()
             await session.refresh(scenario)
+            
+            # 同步到Redis
+            from storage.redis_client import redis_client
+            config_data = self._scenario_to_dict(scenario)
+            await redis_client.set_config('scenario', scenario.scenario_id, config_data)
+            
             return scenario
 
     async def get_scenarios(self):
         """获取所有场景"""
+        # 先尝试从Redis获取
+        from storage.redis_client import redis_client
+        configs = await redis_client.get_all_configs('scenario')
+        
+        if configs:
+            return configs
+        
+        # Redis没有则从MySQL获取
         session = await self.get_session()
         async with session:
             result = await session.execute(select(Scenario))
@@ -201,15 +371,41 @@ class MySQLClient:
 
     async def get_scenario(self, scenario_id: str):
         """根据ID获取场景"""
+        # 先尝试从Redis获取
+        from storage.redis_client import redis_client
+        config = await redis_client.get_config('scenario', scenario_id)
+        
+        if config:
+            return config
+        
+        # Redis没有则从MySQL获取
         session = await self.get_session()
         async with session:
             result = await session.execute(
                 select(Scenario).where(Scenario.scenario_id == scenario_id)
             )
-            return result.scalar_one_or_none()
+            scenario = result.scalar_one_or_none()
+            
+            # 同步到Redis
+            if scenario:
+                config_data = self._scenario_to_dict(scenario)
+                await redis_client.set_config('scenario', scenario_id, config_data)
+                return config_data
+            return None
 
     async def update_scenario(self, scenario_id: str, update_data: dict):
         """更新场景"""
+        from storage.redis_client import redis_client
+        
+        # 先更新Redis
+        existing_config = await redis_client.get_config('scenario', scenario_id)
+        if existing_config:
+            existing_config.update(update_data)
+            await redis_client.set_config('scenario', scenario_id, existing_config)
+            # 加入异步同步队列
+            await redis_client.queue_config_sync('scenario', scenario_id, existing_config)
+        
+        # 更新MySQL
         session = await self.get_session()
         async with session:
             result = await session.execute(
@@ -222,10 +418,17 @@ class MySQLClient:
                         setattr(scenario, key, value)
                 await session.commit()
                 await session.refresh(scenario)
-            return scenario
+                return self._scenario_to_dict(scenario)
+            return None
 
     async def delete_scenario(self, scenario_id: str):
         """删除场景"""
+        from storage.redis_client import redis_client
+        
+        # 从Redis删除
+        await redis_client.delete_config('scenario', scenario_id)
+        
+        # 从MySQL删除
         session = await self.get_session()
         async with session:
             result = await session.execute(
@@ -514,6 +717,143 @@ class MySQLClient:
             )
             await session.commit()
             return True
+
+    # ========== 通话记录缓存和同步 ==========
+    
+    async def create_call_record_from_redis(self, call_data: dict):
+        """从Redis数据创建通话记录到MySQL"""
+        try:
+            session = await self.get_session()
+            async with session:
+                call_record = CallRecord(
+                    session_id=call_data.get('session_id'),
+                    caller_number=call_data.get('caller_number'),
+                    start_time=call_data.get('start_time'),
+                    conversation_log=call_data.get('conversation_log', '')
+                )
+                session.add(call_record)
+                await session.commit()
+                await session.refresh(call_record)
+                logger.debug(f"通话记录已同步到MySQL: {call_record.id}")
+                return call_record.id
+        except Exception as e:
+            logger.error(f"创建通话记录失败: {e}")
+            return None
+    
+    async def update_call_record_from_redis(self, session_id: str, call_data: dict):
+        """从Redis数据更新通话记录到MySQL"""
+        try:
+            session = await self.get_session()
+            async with session:
+                result = await session.execute(
+                    select(CallRecord).where(CallRecord.session_id == session_id)
+                )
+                call_record = result.scalar_one_or_none()
+                
+                if call_record:
+                    # 更新现有记录
+                    if 'end_time' in call_data:
+                        call_record.end_time = call_data['end_time']
+                    if 'duration' in call_data:
+                        call_record.duration = call_data['duration']
+                    if 'conversation_log' in call_data:
+                        call_record.conversation_log = call_data['conversation_log']
+                    if 'status' in call_data:
+                        call_record.status = call_data['status']
+                    await session.commit()
+                    logger.debug(f"通话记录已更新: {call_record.id}")
+                else:
+                    # 创建新记录
+                    await self.create_call_record_from_redis(call_data)
+                    
+        except Exception as e:
+            logger.error(f"更新通话记录失败: {e}")
+    
+    async def update_config_from_redis(self, config_type: str, config_id: str, config_data: dict):
+        """从Redis更新配置到MySQL"""
+        try:
+            if config_type == 'scenario':
+                await self._update_scenario_to_mysql(config_id, config_data)
+            elif config_type == 'freeswitch':
+                await self._update_freeswitch_config_to_mysql(config_id, config_data)
+            elif config_type == 'gateway':
+                await self._update_gateway_to_mysql(config_id, config_data)
+            elif config_type == 'entry_point':
+                await self._update_entry_point_to_mysql(config_id, config_data)
+            elif config_type == 'campaign':
+                await self._update_campaign_to_mysql(config_id, config_data)
+        except Exception as e:
+            logger.error(f"更新配置到MySQL失败: {e}")
+    
+    async def _update_scenario_to_mysql(self, scenario_id: str, config_data: dict):
+        """更新场景到MySQL"""
+        session = await self.get_session()
+        async with session:
+            result = await session.execute(
+                select(Scenario).where(Scenario.scenario_id == scenario_id)
+            )
+            scenario = result.scalar_one_or_none()
+            if scenario:
+                for key, value in config_data.items():
+                    if hasattr(scenario, key) and key not in ['id', 'created_at']:
+                        setattr(scenario, key, value)
+                await session.commit()
+    
+    async def _update_freeswitch_config_to_mysql(self, instance_id: str, config_data: dict):
+        """更新FreeSWITCH配置到MySQL"""
+        session = await self.get_session()
+        async with session:
+            result = await session.execute(
+                select(FreeSwitchConfig).where(FreeSwitchConfig.instance_id == instance_id)
+            )
+            config = result.scalar_one_or_none()
+            if config:
+                for key, value in config_data.items():
+                    if hasattr(config, key) and key not in ['id', 'created_at']:
+                        setattr(config, key, value)
+                await session.commit()
+    
+    async def _update_gateway_to_mysql(self, gateway_id: str, config_data: dict):
+        """更新网关到MySQL"""
+        session = await self.get_session()
+        async with session:
+            result = await session.execute(
+                select(Gateway).where(Gateway.gateway_id == gateway_id)
+            )
+            gateway = result.scalar_one_or_none()
+            if gateway:
+                for key, value in config_data.items():
+                    if hasattr(gateway, key) and key not in ['id', 'created_at']:
+                        setattr(gateway, key, value)
+                await session.commit()
+    
+    async def _update_entry_point_to_mysql(self, entry_point_id: str, config_data: dict):
+        """更新入口点到MySQL"""
+        session = await self.get_session()
+        async with session:
+            result = await session.execute(
+                select(EntryPoint).where(EntryPoint.entry_point_id == entry_point_id)
+            )
+            entry_point = result.scalar_one_or_none()
+            if entry_point:
+                for key, value in config_data.items():
+                    if hasattr(entry_point, key) and key not in ['id', 'created_at']:
+                        setattr(entry_point, key, value)
+                await session.commit()
+    
+    async def _update_campaign_to_mysql(self, campaign_id: str, config_data: dict):
+        """更新外呼活动到MySQL"""
+        session = await self.get_session()
+        async with session:
+            result = await session.execute(
+                select(OutboundCampaign).where(OutboundCampaign.campaign_id == campaign_id)
+            )
+            campaign = result.scalar_one_or_none()
+            if campaign:
+                for key, value in config_data.items():
+                    if hasattr(campaign, key) and key not in ['id', 'created_at']:
+                        setattr(campaign, key, value)
+                await session.commit()
 
 # 全局MySQL客户端实例
 mysql_client = MySQLClient()
