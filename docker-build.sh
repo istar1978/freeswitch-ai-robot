@@ -19,10 +19,10 @@ echo -e "${GREEN}FreeSWITCH AI Robot - Docker Build${NC}"
 echo -e "${GREEN}========================================${NC}"
 
 # 检查Docker是否安装
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}错误: Docker未安装${NC}"
-    exit 1
-fi
+#if ! command -v docker &> /dev/null; then
+#    echo -e "${RED}错误: Docker未安装${NC}"
+#    exit 1
+#fi
 
 # 构建镜像
 echo -e "\n${YELLOW}[1/4] 构建Docker镜像...${NC}"
